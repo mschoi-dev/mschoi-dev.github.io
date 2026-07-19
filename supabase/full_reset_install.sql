@@ -18,8 +18,8 @@ drop table if exists public.profiles        cascade;
 drop function if exists public.handle_new_user();
 drop function if exists public.is_approved();
 
-delete from storage.objects where bucket_id in ('downloads', 'community');
-delete from storage.buckets  where id        in ('downloads', 'community');
+-- NOTE: storage buckets cannot be dropped via SQL (Supabase policy).
+-- Existing 'downloads' / 'community' buckets are reused as-is below.
 
 -- ---------- 1. MEMBER PROFILES ----------
 create table public.profiles (
@@ -93,7 +93,8 @@ $$;
 
 -- ---------- 2. GATED DOWNLOADS ----------
 insert into storage.buckets (id, name, public)
-values ('downloads', 'downloads', false);
+values ('downloads', 'downloads', false)
+on conflict (id) do nothing;
 
 create policy "approved members can download"
   on storage.objects for select
@@ -140,7 +141,8 @@ create policy "authors delete own posts"
   using (auth.uid() = author_id);
 
 insert into storage.buckets (id, name, public)
-values ('community', 'community', false);
+values ('community', 'community', false)
+on conflict (id) do nothing;
 
 create policy "approved members upload community images"
   on storage.objects for insert
