@@ -9,7 +9,7 @@
 </head>
 <body>
   <nav class="nav">
-    <a href="index.html" class="nav-logo">Minseok Choi<span class="accent">.</span></a>
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
     <div class="nav-links">
       <a href="index.html">Home</a>
       <a href="projects.html">Projects</a>
@@ -17,7 +17,9 @@
       <a href="notes.html">Notes</a>
       <a href="journal.html">Journal</a>
       <a href="photos.html">Photos</a>
+      <a href="community.html">Community</a>
       <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
     </div>
   </nav>
 
@@ -79,17 +81,18 @@
       msg.textContent = 'Creating your account…';
       msg.className = 'form-msg';
 
+      const email = document.getElementById('email').value.trim();
+      const full_name = document.getElementById('full_name').value.trim();
+      const country = document.getElementById('country').value.trim();
+      const origin = document.getElementById('origin').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+
       const { error } = await sb.auth.signUp({
-        email: document.getElementById('email').value.trim(),
+        email,
         password: document.getElementById('password').value,
         options: {
           emailRedirectTo: 'https://mschoi-dev.github.io/login.html',
-          data: {
-            full_name: document.getElementById('full_name').value.trim(),
-            country: document.getElementById('country').value.trim(),
-            origin: document.getElementById('origin').value.trim(),
-            phone: document.getElementById('phone').value.trim()
-          }
+          data: { full_name, country, origin, phone }
         }
       });
 
@@ -98,6 +101,17 @@
         msg.className = 'form-msg error';
         btn.disabled = false;
       } else {
+        // Notify the site owner about the new signup (best-effort).
+        try {
+          await fetch('https://formsubmit.co/ajax/minseok0640@gmail.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+              _subject: '[mschoi-dev.github.io] New member signup: ' + full_name,
+              name: full_name, email, country, origin, phone: phone || '(not provided)'
+            })
+          });
+        } catch (_) { /* notification failure must not block signup */ }
         msg.textContent = '✓ Done! Check your inbox and click the verification link. After that, your account awaits approval.';
         msg.className = 'form-msg ok';
         form.reset();
