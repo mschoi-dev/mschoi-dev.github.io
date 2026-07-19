@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Download software built by Minseok Choi.">
+  <meta name="description" content="Member-only downloads of software built by Minseok Choi.">
   <title>Downloads — Minseok Choi</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
@@ -25,29 +25,101 @@
   <main>
     <section class="section">
       <h1 class="page-title">Downloads</h1>
-      <p class="page-desc">Releases are being prepared. Each program will be published here via GitHub Releases.</p>
+      <p class="page-desc">Downloads are available to approved members only.</p>
 
-      <div class="download-list">
-        <div class="download-item">
-          <div>
-            <h3>Gear Studio</h3>
-            <p>Gear train design desktop app</p>
-          </div>
-          <span class="badge badge-soon">Coming soon</span>
-        </div>
-        <div class="download-item">
-          <div>
-            <h3>Drone Stability Test</h3>
-            <p>Drone wind-stability simulator</p>
-          </div>
-          <span class="badge badge-soon">Coming soon</span>
-        </div>
+      <div id="auth-area">
+        <p class="empty-state">Checking your session…</p>
       </div>
     </section>
   </main>
 
   <footer class="footer">
-    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a></p>
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
   </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const area = document.getElementById('auth-area');
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    async function render() {
+      const { data: { session } } = await sb.auth.getSession();
+
+      if (!session) {
+        area.innerHTML = `
+          <div class="gate">
+            <p>Please sign in to see the download list.</p>
+            <div class="hero-actions">
+              <a href="login.html" class="btn btn-primary">Sign in</a>
+              <a href="signup.html" class="btn">Sign up</a>
+            </div>
+          </div>`;
+        return;
+      }
+
+      const { data: profile, error: pErr } = await sb
+        .from('profiles').select('full_name, status').eq('id', session.user.id).single();
+
+      if (pErr || !profile) {
+        area.innerHTML = `<p class="form-msg error">Could not load your profile. Please try again later.</p>`;
+        return;
+      }
+
+      const signOutBar = `
+        <p class="note">Signed in as <strong>${esc(profile.full_name || session.user.email)}</strong>
+        · <a href="#" id="signout">Sign out</a></p>`;
+
+      if (profile.status === 'pending') {
+        area.innerHTML = `
+          <div class="gate">
+            <p>⏳ Your account is <strong>awaiting approval</strong>. You will be able to download once it is approved.</p>
+          </div>` + signOutBar;
+      } else if (profile.status === 'blocked') {
+        area.innerHTML = `
+          <div class="gate"><p>This account does not have download access.</p></div>` + signOutBar;
+      } else {
+        const { data: items, error: iErr } = await sb
+          .from('download_items').select('*').order('created_at', { ascending: false });
+
+        if (iErr) {
+          area.innerHTML = `<p class="form-msg error">Could not load downloads.</p>` + signOutBar;
+        } else if (!items || items.length === 0) {
+          area.innerHTML = `<p class="empty-state">No files published yet — coming soon.</p>` + signOutBar;
+        } else {
+          area.innerHTML = `<div class="download-list">` + items.map(it => `
+            <div class="download-item">
+              <div>
+                <h3>${esc(it.title)}${it.version ? ` <span class="hint">v${esc(it.version)}</span>` : ''}</h3>
+                <p>${esc(it.description || '')}</p>
+              </div>
+              <button class="btn btn-primary dl-btn" data-path="${esc(it.file_path)}">Download</button>
+            </div>`).join('') + `</div>` + signOutBar;
+
+          document.querySelectorAll('.dl-btn').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true; b.textContent = 'Preparing…';
+            const { data, error } = await sb.storage.from('downloads').createSignedUrl(b.dataset.path, 600);
+            if (error) { b.textContent = 'Error'; setTimeout(() => { b.disabled = false; b.textContent = 'Download'; }, 2000); return; }
+            window.location.href = data.signedUrl;
+            b.disabled = false; b.textContent = 'Download';
+          }));
+        }
+      }
+
+      const so = document.getElementById('signout');
+      if (so) so.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await sb.auth.signOut();
+        render();
+      });
+    }
+
+    render();
+  </script>
 </body>
 </html>

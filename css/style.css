@@ -303,6 +303,45 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
   padding: 0.35rem 0.1rem 0;
 }
 
+/* --- Auth & forms --- */
+.auth-box { max-width: 460px; }
+
+.form { display: flex; flex-direction: column; gap: 1.1rem; }
+.field { display: flex; flex-direction: column; gap: 0.35rem; }
+.field label { font-size: 0.88rem; font-weight: 600; }
+.field input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+}
+.field input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.req { color: #d64545; }
+.hint { font-size: 0.82rem; font-weight: 400; color: var(--text-dim); }
+
+.form-msg { font-size: 0.9rem; color: var(--text-dim); min-height: 1.2em; }
+.form-msg.error { color: #c03535; }
+.form-msg.ok { color: #1a7f4e; }
+
+.form button[type="submit"] { align-self: flex-start; cursor: pointer; font-family: inherit; }
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+.gate {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.6rem;
+  background: var(--bg-soft);
+  margin-bottom: 1rem;
+}
+.gate p { margin-bottom: 1rem; }
+.gate p:last-child { margin-bottom: 0; }
+
+.dl-btn { cursor: pointer; font-family: inherit; white-space: nowrap; }
+
 /* --- Footer --- */
 .footer {
   border-top: 1px solid var(--border);
