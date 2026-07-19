@@ -108,7 +108,8 @@
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
               _subject: '[mschoi-dev.github.io] New member signup: ' + full_name,
-              name: full_name, email, country, origin, phone: phone || '(not provided)'
+              name: full_name, email, country, origin, phone: phone || '(not provided)',
+              approve_here: 'https://mschoi-dev.github.io/admin.html'
             })
           });
         } catch (_) { /* notification failure must not block signup */ }

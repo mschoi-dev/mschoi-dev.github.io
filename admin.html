@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Admin — Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html">Notes</a>
+      <a href="journal.html">Journal</a>
+      <a href="photos.html">Photos</a>
+      <a href="community.html">Community</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section">
+      <h1 class="page-title">Member Admin</h1>
+      <p class="page-desc">Approve, block, or reset member accounts.</p>
+
+      <div id="auth-area">
+        <p class="empty-state">Checking your session…</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const area = document.getElementById('auth-area');
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    const STATUS_BADGE = {
+      pending:  '<span class="badge badge-soon">pending</span>',
+      approved: '<span class="badge badge-ok">approved</span>',
+      blocked:  '<span class="badge badge-blocked">blocked</span>'
+    };
+
+    async function loadMembers() {
+      const list = document.getElementById('member-list');
+      const { data: members, error } = await sb
+        .from('profiles')
+        .select('id, email, full_name, country, origin, phone, status, role, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) { list.innerHTML = `<p class="form-msg error">Load failed: ${esc(error.message)}</p>`; return; }
+
+      const pending = members.filter(m => m.status === 'pending').length;
+      document.getElementById('pending-count').textContent =
+        pending ? `${pending} member(s) awaiting approval` : 'No pending members';
+
+      list.innerHTML = members.map(m => `
+        <div class="member-row" data-id="${m.id}">
+          <div class="member-info">
+            <strong>${esc(m.full_name)}</strong>
+            ${m.role === 'admin' ? '<span class="badge badge-ok">admin</span>' : ''}
+            ${STATUS_BADGE[m.status] || esc(m.status)}
+            <div class="hint">
+              ${esc(m.email)} · ${esc(m.country)} · ${esc(m.origin)}
+              ${m.phone ? ' · ' + esc(m.phone) : ''}<br>
+              joined ${new Date(m.created_at).toLocaleString()}
+            </div>
+          </div>
+          <div class="member-actions">
+            <button class="btn act-btn" data-status="approved" ${m.status === 'approved' ? 'disabled' : ''}>Approve</button>
+            <button class="btn act-btn" data-status="pending"  ${m.status === 'pending'  ? 'disabled' : ''}>Pending</button>
+            <button class="btn act-btn" data-status="blocked"  ${m.status === 'blocked'  ? 'disabled' : ''}>Block</button>
+          </div>
+        </div>`).join('');
+
+      list.querySelectorAll('.act-btn').forEach(b => b.addEventListener('click', async () => {
+        const row = b.closest('.member-row');
+        b.disabled = true; b.textContent = '…';
+        const { error: uErr } = await sb
+          .from('profiles')
+          .update({ status: b.dataset.status })
+          .eq('id', row.dataset.id);
+        if (uErr) alert('Update failed: ' + uErr.message);
+        loadMembers();
+      }));
+    }
+
+    async function render() {
+      const { data: { session } } = await sb.auth.getSession();
+
+      if (!session) {
+        area.innerHTML = `
+          <div class="gate">
+            <p>Admin access requires sign-in.</p>
+            <div class="hero-actions"><a href="login.html" class="btn btn-primary">Sign in</a></div>
+          </div>`;
+        return;
+      }
+
+      const { data: me } = await sb
+        .from('profiles').select('full_name, role').eq('id', session.user.id).single();
+
+      if (!me || me.role !== 'admin') {
+        area.innerHTML = `<div class="gate"><p>This page is for the site administrator only.</p></div>`;
+        return;
+      }
+
+      area.innerHTML = `
+        <p class="note" id="pending-count">Loading…</p>
+        <div id="member-list"><p class="empty-state">Loading members…</p></div>
+        <p class="note">Signed in as <strong>${esc(me.full_name)}</strong> (admin)
+        · <a href="#" id="signout">Sign out</a></p>`;
+
+      document.getElementById('signout').addEventListener('click', async (e) => {
+        e.preventDefault();
+        await sb.auth.signOut();
+        render();
+      });
+
+      loadMembers();
+    }
+
+    render();
+  </script>
+</body>
+</html>

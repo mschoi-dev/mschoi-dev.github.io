@@ -227,6 +227,24 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
   white-space: nowrap;
 }
 .badge-soon { background: var(--bg-soft); color: var(--text-dim); border: 1px solid var(--border); }
+.badge-ok { background: #e6f6ec; color: #1a7f4e; border: 1px solid #bfe6cf; }
+.badge-blocked { background: #fdecec; color: #c03535; border: 1px solid #f3c6c6; }
+
+/* --- Admin --- */
+.member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.3rem;
+  margin-bottom: 0.8rem;
+}
+.member-info .hint { margin-top: 0.25rem; line-height: 1.5; }
+.member-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.act-btn { padding: 0.35rem 0.9rem; font-size: 0.85rem; cursor: pointer; font-family: inherit; }
 
 /* --- Contact --- */
 .contact-list { display: flex; flex-direction: column; gap: 0.9rem; max-width: 480px; }
