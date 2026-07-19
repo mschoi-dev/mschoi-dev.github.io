@@ -250,6 +250,59 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
 
 .note { margin-top: 2rem; color: var(--text-dim); font-size: 0.9rem; }
 
+/* --- Post lists (Notes / Journal) --- */
+.post-list { display: flex; flex-direction: column; }
+
+.post-item {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4rem;
+  padding: 0.9rem 0.2rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  transition: background 0.15s;
+}
+.post-item:hover { background: var(--bg-soft); text-decoration: none; }
+.post-date {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.post-title { font-weight: 550; }
+
+.empty-state { color: var(--text-dim); font-size: 0.95rem; padding: 1.5rem 0; }
+
+/* --- Entry pages --- */
+.entry { max-width: 680px; }
+.entry-date { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.4rem; }
+.entry-body { margin-top: 1.6rem; }
+.entry-body p { margin-bottom: 1.1rem; }
+.entry-body img { max-width: 100%; border-radius: 10px; margin: 0.6rem 0 1.2rem; }
+.entry-body h2 { font-size: 1.2rem; margin: 1.8rem 0 0.7rem; }
+.back-link { display: inline-block; margin-top: 2rem; font-size: 0.92rem; }
+
+/* --- Photo grid --- */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.8rem;
+}
+.photo-grid figure { margin: 0; }
+.photo-grid img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.photo-grid figcaption {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  padding: 0.35rem 0.1rem 0;
+}
+
 /* --- Footer --- */
 .footer {
   border-top: 1px solid var(--border);
