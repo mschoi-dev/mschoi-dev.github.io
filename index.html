@@ -1,15 +1,19 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Minseok Choi — engineer & builder. Portfolio, software downloads, and contact.">
+  <meta name="description" content="Minseok Choi — engineer & builder. Quantum sensor R&D and independent software projects.">
+  <meta property="og:title" content="Minseok Choi">
+  <meta property="og:description" content="Engineer & builder. Quantum sensor R&D and independent software projects.">
+  <meta property="og:url" content="https://mschoi-dev.github.io/">
   <title>Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <nav class="nav">
-    <a href="index.html" class="nav-logo">MC<span class="accent">.</span></a>
+    <a href="index.html" class="nav-logo">Minseok Choi<span class="accent">.</span></a>
     <div class="nav-links">
       <a href="index.html" class="active">Home</a>
       <a href="projects.html">Projects</a>
@@ -20,40 +24,44 @@
 
   <main>
     <section class="hero">
-      <p class="hero-kicker">ENGINEER · BUILDER</p>
-      <h1>최민석 <span class="hero-en">Minseok Choi</span></h1>
-      <p class="hero-desc">
-        양자 센서를 개발하고, 쓸모 있는 소프트웨어를 만듭니다.<br>
-        Quantum sensor R&amp;D at Arrakis Tech — and independent software projects on the side.
-      </p>
-      <div class="hero-actions">
-        <a href="projects.html" class="btn btn-primary">작업물 보기</a>
-        <a href="contact.html" class="btn">연락하기</a>
+      <div class="avatar-placeholder" aria-hidden="true">MC</div>
+      <div>
+        <p class="hero-kicker">Engineer · Builder</p>
+        <h1>Minseok Choi</h1>
+        <p class="hero-sub">최민석 — Quantum sensor R&amp;D at Arrakis Tech</p>
+        <p class="hero-desc">
+          I work on quantum magnetometers by day and build practical software on the side —
+          desktop tools, simulators, and web apps that solve real problems.
+        </p>
+        <div class="hero-actions">
+          <a href="projects.html" class="btn btn-primary">View my work</a>
+          <a href="contact.html" class="btn">Get in touch</a>
+        </div>
       </div>
     </section>
 
     <section class="section">
-      <h2 class="section-title">// Featured Projects</h2>
+      <h2 class="section-title">Featured Projects</h2>
       <div class="card-grid">
         <a class="card" href="projects.html#gear-studio">
           <h3>Gear Studio</h3>
-          <p>기어열 설계 데스크톱 앱. 자동 사이징, 8종 기어, 메이트, 자동 전위 지원. 완전 오프라인.</p>
-          <span class="card-tag">PySide6 · Desktop</span>
+          <p>Native desktop app for gear train design — auto-fit sizing, 8 gear types, mating, automatic profile shift. Fully offline.</p>
+          <span class="card-tag">Desktop</span>
         </a>
         <a class="card" href="projects.html#faraday">
           <h3>FARADAY</h3>
-          <p>제품화·라이선스 관리 플랫폼. 회원 가입 → 관리자 승인 → 다운로드 배포 모델.</p>
-          <span class="card-tag">Web · Platform</span>
+          <p>Distribution and licensing platform for my software: sign-up, admin approval, controlled downloads.</p>
+          <span class="card-tag">Platform</span>
         </a>
         <a class="card" href="projects.html#synapsemap">
           <h3>SynapseMap</h3>
-          <p>친밀도 기반 인맥 관계 지도 앱. 사람 사이의 연결을 시각화합니다.</p>
+          <p>Web app that maps personal networks as an interactive graph, organized by closeness.</p>
           <span class="card-tag">Web App</span>
         </a>
         <a class="card" href="projects.html#drone-sim">
           <h3>Drone Stability Test</h3>
-          <p>드론 호버 바람 안정성 시뮬레이터. DJI 8개 기종, 실시간 위험 게이지.</p>
-          <span class="card-tag">PySide6 · Simulation</span>
+          <p>Wind-stability simulator for hovering drones — 8 DJI presets with a real-time risk gauge.</p>
+          <span class="card-tag">Simulation</span>
         </a>
       </div>
     </section>
