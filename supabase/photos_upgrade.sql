@@ -4,6 +4,11 @@
 -- Paste into Supabase > SQL Editor > Run.
 -- ============================================================
 
+-- 0. Clean re-run guard (these tables are new/empty; safe to recreate)
+drop table if exists public.photo_comments cascade;
+drop table if exists public.photo_likes    cascade;
+drop table if exists public.photo_posts    cascade;
+
 -- 1. Photo posts (admin-only publishing)
 create table public.photo_posts (
   id          bigint generated always as identity primary key,
