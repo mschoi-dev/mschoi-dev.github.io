@@ -527,8 +527,10 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
 .dlg-text-sm { min-height: 90px; }
 .dlg-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-/* --- Page head with action button --- */
-.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+/* --- Page head with action button (title and + on the same line) --- */
+.page-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.page-head .page-title { margin-bottom: 0; }
+.page-head + .page-desc { margin-top: 0.5rem; }
 
 /* --- New post (+) button, IG-style --- */
 .ig-add-btn {
