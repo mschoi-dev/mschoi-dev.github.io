@@ -24,14 +24,38 @@
 
   <main>
     <section class="section">
-      <h1 class="page-title">Downloads</h1>
-      <p class="page-desc">Downloads are available to approved members only.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Downloads</h1>
+          <p class="page-desc">Downloads are available to approved members only.</p>
+        </div>
+        <div id="add-area"></div>
+      </div>
 
       <div id="auth-area">
         <p class="empty-state">Checking your session…</p>
       </div>
     </section>
   </main>
+
+  <!-- Publish file modal (admin) -->
+  <div class="ig-modal" id="create-modal" hidden>
+    <div class="ig-modal-backdrop" id="create-close-bg"></div>
+    <div class="ig-create-box dlg">
+      <div class="ig-create-head">
+        <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
+        <strong>Publish file</strong>
+        <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
+      </div>
+      <div class="dlg-body">
+        <input type="text" id="d-title" class="dlg-input" maxlength="200" placeholder="Title (e.g. Gear Studio)">
+        <input type="text" id="d-version" class="dlg-input" maxlength="50" placeholder="Version (e.g. 0.6) — optional">
+        <textarea id="d-desc" class="dlg-text dlg-text-sm" maxlength="1000" placeholder="Short description — optional"></textarea>
+        <input type="file" id="d-file" class="dlg-input">
+        <p class="hint" id="create-msg"></p>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">
     <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
@@ -40,12 +64,55 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
   <script>
-    const area = document.getElementById('auth-area');
+    const $ = id => document.getElementById(id);
+    const area = $('auth-area');
+    let me = null;          // { id, name, approved, admin }
+    let items = [];
 
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s == null ? '' : String(s);
-      return d.innerHTML;
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    function renderItems() {
+      const sortEl = $('dl-sort');
+      const s = sortEl ? sortEl.value : 'new';
+      const rows = items.slice().sort((a, b) =>
+        s === 'popular' ? (b.downloads_count || 0) - (a.downloads_count || 0)
+                        : new Date(b.created_at) - new Date(a.created_at));
+      const listEl = $('dl-list');
+      if (!rows.length) { listEl.innerHTML = '<p class="empty-state">No files published yet — coming soon.</p>'; return; }
+      listEl.innerHTML = rows.map(it => `
+        <div class="download-item">
+          <div>
+            <h3>${esc(it.title)}${it.version ? ` <span class="hint">v${esc(it.version)}</span>` : ''}</h3>
+            <p>${esc(it.description || '')}</p>
+            <p class="hint">${it.downloads_count || 0} downloads</p>
+          </div>
+          <div class="member-actions">
+            <button class="btn btn-primary dl-btn" data-id="${it.id}" data-path="${esc(it.file_path)}">Download</button>
+            ${me && me.admin ? `<button class="btn act-btn dl-del" data-id="${it.id}" data-path="${esc(it.file_path)}">Delete</button>` : ''}
+          </div>
+        </div>`).join('');
+
+      listEl.querySelectorAll('.dl-btn').forEach(b => b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = 'Preparing…';
+        const { data, error } = await sb.storage.from('downloads').createSignedUrl(b.dataset.path, 600);
+        if (error) { b.textContent = 'Error'; setTimeout(() => { b.disabled = false; b.textContent = 'Download'; }, 2000); return; }
+        sb.rpc('bump_download_count', { p_id: Number(b.dataset.id) });
+        window.location.href = data.signedUrl;
+        b.disabled = false; b.textContent = 'Download';
+      }));
+
+      listEl.querySelectorAll('.dl-del').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Delete this file?')) return;
+        await sb.from('download_items').delete().eq('id', b.dataset.id);
+        await sb.storage.from('downloads').remove([b.dataset.path]);
+        loadItems();
+      }));
+    }
+
+    async function loadItems() {
+      const { data } = await sb.from('download_items').select('*');
+      items = data || [];
+      renderItems();
     }
 
     async function render() {
@@ -64,18 +131,33 @@
       }
 
       const { data: profile, error: pErr } = await sb
-        .from('profiles').select('full_name, status').eq('id', session.user.id).single();
+        .from('profiles').select('full_name, status, role').eq('id', session.user.id).single();
 
       if (pErr || !profile) {
         area.innerHTML = `<p class="form-msg error">Could not load your profile. Please try again later.</p>`;
         return;
       }
 
+      me = {
+        id: session.user.id, name: profile.full_name,
+        approved: profile.status === 'approved', admin: profile.role === 'admin'
+      };
+
       const signOutBar = `
         <p class="note">Signed in as <strong>${esc(profile.full_name || session.user.email)}</strong>
         · <a href="#" id="signout">Sign out</a></p>`;
 
-      if (profile.status === 'pending') {
+      if (me.admin) {
+        $('add-area').innerHTML = `
+          <button class="ig-add-btn" id="add-btn" type="button" title="Publish file" aria-label="Publish file">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>
+          </button>`;
+        $('add-btn').addEventListener('click', () => {
+          $('create-modal').hidden = false; document.body.style.overflow = 'hidden';
+        });
+      }
+
+      if (profile.status === 'pending' && !me.admin) {
         area.innerHTML = `
           <div class="gate">
             <p>⏳ Your account is <strong>awaiting approval</strong>. You will be able to download once it is approved.</p>
@@ -84,40 +166,65 @@
         area.innerHTML = `
           <div class="gate"><p>This account does not have download access.</p></div>` + signOutBar;
       } else {
-        const { data: items, error: iErr } = await sb
-          .from('download_items').select('*').order('created_at', { ascending: false });
-
-        if (iErr) {
-          area.innerHTML = `<p class="form-msg error">Could not load downloads.</p>` + signOutBar;
-        } else if (!items || items.length === 0) {
-          area.innerHTML = `<p class="empty-state">No files published yet — coming soon.</p>` + signOutBar;
-        } else {
-          area.innerHTML = `<div class="download-list">` + items.map(it => `
-            <div class="download-item">
-              <div>
-                <h3>${esc(it.title)}${it.version ? ` <span class="hint">v${esc(it.version)}</span>` : ''}</h3>
-                <p>${esc(it.description || '')}</p>
-              </div>
-              <button class="btn btn-primary dl-btn" data-path="${esc(it.file_path)}">Download</button>
-            </div>`).join('') + `</div>` + signOutBar;
-
-          document.querySelectorAll('.dl-btn').forEach(b => b.addEventListener('click', async () => {
-            b.disabled = true; b.textContent = 'Preparing…';
-            const { data, error } = await sb.storage.from('downloads').createSignedUrl(b.dataset.path, 600);
-            if (error) { b.textContent = 'Error'; setTimeout(() => { b.disabled = false; b.textContent = 'Download'; }, 2000); return; }
-            window.location.href = data.signedUrl;
-            b.disabled = false; b.textContent = 'Download';
-          }));
-        }
+        area.innerHTML = `
+          <div class="list-controls">
+            <span></span>
+            <select class="sort-select" id="dl-sort">
+              <option value="new">Newest</option>
+              <option value="popular">Most downloaded</option>
+            </select>
+          </div>
+          <div class="download-list" id="dl-list"><p class="empty-state">Loading…</p></div>` + signOutBar;
+        $('dl-sort').addEventListener('change', renderItems);
+        loadItems();
       }
 
-      const so = document.getElementById('signout');
+      const so = $('signout');
       if (so) so.addEventListener('click', async (e) => {
         e.preventDefault();
         await sb.auth.signOut();
-        render();
+        location.reload();
       });
     }
+
+    // --- Publish file modal ---
+    function updateShareState() {
+      $('create-share').disabled = !($('d-title').value.trim() && $('d-file').files.length);
+    }
+    $('d-title').addEventListener('input', updateShareState);
+    $('d-file').addEventListener('change', updateShareState);
+
+    function closeCreate() {
+      $('create-modal').hidden = true; document.body.style.overflow = '';
+      $('d-title').value = ''; $('d-version').value = ''; $('d-desc').value = ''; $('d-file').value = '';
+      $('create-msg').textContent = ''; updateShareState();
+    }
+    $('create-cancel').addEventListener('click', closeCreate);
+    $('create-close-bg').addEventListener('click', closeCreate);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('create-modal').hidden) closeCreate(); });
+
+    $('create-share').addEventListener('click', async () => {
+      const file = $('d-file').files[0];
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        $('create-msg').textContent = 'Max file size is 50 MB on the current plan.'; return;
+      }
+      $('create-share').disabled = true;
+      $('create-msg').textContent = 'Uploading… (large files can take a while)';
+      const safe = file.name.replace(/[^\w.\-]/g, '_');
+      const path = `files/${Date.now()}_${safe}`;
+      const { error: upErr } = await sb.storage.from('downloads').upload(path, file);
+      if (upErr) { $('create-msg').textContent = 'Upload failed: ' + upErr.message; $('create-share').disabled = false; return; }
+      const { error: insErr } = await sb.from('download_items').insert({
+        title: $('d-title').value.trim(),
+        version: $('d-version').value.trim() || null,
+        description: $('d-desc').value.trim() || null,
+        file_path: path
+      });
+      if (insErr) { $('create-msg').textContent = 'Save failed: ' + insErr.message; $('create-share').disabled = false; return; }
+      closeCreate();
+      loadItems();
+    });
 
     render();
   </script>

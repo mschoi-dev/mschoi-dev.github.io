@@ -24,49 +24,146 @@
 
   <main>
     <section class="section">
-      <h1 class="page-title">Notes</h1>
-      <p class="page-desc">A lighter space than Projects — my journal, papers and journals I read
-      and analyze, and insights and ideas from research and everyday study.</p>
-
-      <div class="cat-tabs" role="tablist">
-        <button class="cat-tab active" data-cat="all">All</button>
-        <button class="cat-tab" data-cat="journal">Journal</button>
-        <button class="cat-tab" data-cat="paper">Paper Review</button>
-        <button class="cat-tab" data-cat="insight">Insight</button>
-        <button class="cat-tab" data-cat="idea">Idea</button>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Notes</h1>
+          <p class="page-desc">A lighter space than Projects — my journal, papers and journals I read
+          and analyze, and insights and ideas from research and everyday study.</p>
+        </div>
+        <div id="add-area"></div>
       </div>
 
-      <div class="post-list" id="post-list">
-        <a class="post-item" href="notes/2026-07-19-launch.html" data-cat="journal">
-          <span class="post-date">2026-07-19</span>
-          <span class="post-title">This site is live</span>
-          <span class="cat-badge cat-journal">Journal</span>
-        </a>
+      <div class="list-controls">
+        <div class="cat-tabs" role="tablist">
+          <button class="cat-tab active" data-cat="all">All</button>
+          <button class="cat-tab" data-cat="journal">Journal</button>
+          <button class="cat-tab" data-cat="paper">Paper Review</button>
+          <button class="cat-tab" data-cat="insight">Insight</button>
+          <button class="cat-tab" data-cat="idea">Idea</button>
+        </div>
+        <select class="sort-select" id="sort">
+          <option value="new">Newest</option>
+          <option value="old">Oldest</option>
+          <option value="views">Most viewed</option>
+        </select>
       </div>
-      <p class="empty-state" id="cat-empty" hidden>Nothing in this category yet.</p>
+
+      <div class="post-list" id="post-list"><p class="empty-state">Loading…</p></div>
     </section>
   </main>
+
+  <!-- Create note modal -->
+  <div class="ig-modal" id="create-modal" hidden>
+    <div class="ig-modal-backdrop" id="create-close-bg"></div>
+    <div class="ig-create-box dlg">
+      <div class="ig-create-head">
+        <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
+        <strong>New note</strong>
+        <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
+      </div>
+      <div class="dlg-body">
+        <input type="text" id="n-title" class="dlg-input" maxlength="200" placeholder="Title">
+        <select id="n-cat" class="dlg-input">
+          <option value="journal">Journal</option>
+          <option value="paper">Paper Review</option>
+          <option value="insight">Insight</option>
+          <option value="idea">Idea</option>
+        </select>
+        <textarea id="n-content" class="dlg-text" maxlength="20000" placeholder="Write your note… (blank line = new paragraph)"></textarea>
+        <p class="hint" id="create-msg"></p>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">
     <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
   <script>
-    const tabs = document.querySelectorAll('.cat-tab');
-    const items = document.querySelectorAll('.post-item');
-    const emptyMsg = document.getElementById('cat-empty');
+    const CAT_LABEL = { journal: 'Journal', paper: 'Paper Review', insight: 'Insight', idea: 'Idea' };
+    let notes = [], curCat = 'all', me = null;
+    const $ = id => document.getElementById(id);
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
-    tabs.forEach(t => t.addEventListener('click', () => {
-      tabs.forEach(x => x.classList.remove('active'));
+    function renderList() {
+      const list = $('post-list');
+      let rows = notes.filter(n => curCat === 'all' || n.category === curCat);
+      const s = $('sort').value;
+      rows = rows.slice().sort((a, b) =>
+        s === 'views' ? b.views - a.views :
+        s === 'old' ? new Date(a.created_at) - new Date(b.created_at) :
+                      new Date(b.created_at) - new Date(a.created_at));
+      if (!rows.length) { list.innerHTML = '<p class="empty-state">Nothing in this category yet.</p>'; return; }
+      list.innerHTML = rows.map(n => `
+        <a class="post-item" href="note.html?id=${n.id}">
+          <span class="post-date">${n.created_at.slice(0, 10)}</span>
+          <span class="post-title">${esc(n.title)}</span>
+          <span class="post-views hint">${n.views} views</span>
+          <span class="cat-badge cat-${n.category}">${CAT_LABEL[n.category] || n.category}</span>
+        </a>`).join('');
+    }
+
+    async function load() {
+      const { data } = await sb.from('notes_posts').select('id, title, category, views, created_at');
+      notes = data || [];
+      renderList();
+    }
+
+    document.querySelectorAll('.cat-tab').forEach(t => t.addEventListener('click', () => {
+      document.querySelectorAll('.cat-tab').forEach(x => x.classList.remove('active'));
       t.classList.add('active');
-      let visible = 0;
-      items.forEach(it => {
-        const show = t.dataset.cat === 'all' || it.dataset.cat === t.dataset.cat;
-        it.style.display = show ? '' : 'none';
-        if (show) visible++;
-      });
-      emptyMsg.hidden = visible > 0;
+      curCat = t.dataset.cat;
+      renderList();
     }));
+    $('sort').addEventListener('change', renderList);
+
+    // --- Admin: create note ---
+    function updateShareState() {
+      $('create-share').disabled = !($('n-title').value.trim() && $('n-content').value.trim());
+    }
+    ['n-title', 'n-content'].forEach(id => $(id).addEventListener('input', updateShareState));
+
+    function closeCreate() {
+      $('create-modal').hidden = true; document.body.style.overflow = '';
+      $('n-title').value = ''; $('n-content').value = ''; $('n-cat').value = 'journal';
+      $('create-msg').textContent = ''; updateShareState();
+    }
+    $('create-cancel').addEventListener('click', closeCreate);
+    $('create-close-bg').addEventListener('click', closeCreate);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('create-modal').hidden) closeCreate(); });
+
+    $('create-share').addEventListener('click', async () => {
+      $('create-share').disabled = true;
+      $('create-msg').textContent = 'Sharing…';
+      const { error } = await sb.from('notes_posts').insert({
+        title: $('n-title').value.trim(),
+        category: $('n-cat').value,
+        content: $('n-content').value.trim()
+      });
+      if (error) { $('create-msg').textContent = 'Failed: ' + error.message; $('create-share').disabled = false; return; }
+      closeCreate();
+      load();
+    });
+
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const { data: p } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
+        me = p;
+        if (p && p.role === 'admin') {
+          $('add-area').innerHTML = `
+            <button class="ig-add-btn" id="add-btn" type="button" title="New note" aria-label="New note">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>
+            </button>`;
+          $('add-btn').addEventListener('click', () => {
+            $('create-modal').hidden = false; document.body.style.overflow = 'hidden';
+          });
+        }
+      }
+      load();
+    })();
   </script>
 </body>
 </html>

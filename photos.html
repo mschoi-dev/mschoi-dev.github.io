@@ -32,6 +32,15 @@
         <div id="upload-area"></div>
       </div>
 
+      <div class="list-controls">
+        <span></span>
+        <select class="sort-select" id="sort">
+          <option value="new">Newest</option>
+          <option value="liked">Most liked</option>
+          <option value="viewed">Most viewed</option>
+        </select>
+      </div>
+
       <div class="ig-grid" id="grid"><p class="empty-state">Loading…</p></div>
     </section>
   </main>
@@ -141,7 +150,12 @@
         grid.innerHTML = '<p class="empty-state">First photos coming soon.</p>';
         return;
       }
-      grid.innerHTML = posts.map(p => `
+      const s = $('sort').value;
+      const sorted = posts.slice().sort((a, b) =>
+        s === 'liked'  ? (likeMap[b.id] || 0) - (likeMap[a.id] || 0) :
+        s === 'viewed' ? (b.views || 0) - (a.views || 0) :
+                         new Date(b.created_at) - new Date(a.created_at));
+      grid.innerHTML = sorted.map(p => `
         <button class="ig-cell" data-id="${p.id}">
           <img src="${publicUrl(p.image_path)}" alt="" loading="lazy">
           <span class="ig-overlay"><span>♥ ${likeMap[p.id] || 0}</span><span>💬 ${commentMap[p.id] || 0}</span></span>
@@ -265,10 +279,12 @@
 
     function openModal(post) {
       current = post;
+      post.views = (post.views || 0) + 1;
+      sb.rpc('bump_photo_views', { p_id: post.id });
       $('modal-img').src = publicUrl(post.image_path);
       $('modal-caption').innerHTML =
         `<strong>Minseok Choi</strong> ${esc(post.caption || '')}<br>
-         <span class="hint">${new Date(post.created_at).toLocaleDateString()}</span>`;
+         <span class="hint">${new Date(post.created_at).toLocaleDateString()} · ${post.views} views</span>`;
       $('modal-admin').innerHTML = (me && me.admin)
         ? `<a href="#" id="post-del" class="hint">delete post</a>` : '';
       $('modal-msg').textContent = '';
@@ -336,6 +352,8 @@
       }
       $('comment-btn').disabled = false;
     });
+
+    $('sort').addEventListener('change', renderGrid);
 
     (async () => {
       await loadSession();

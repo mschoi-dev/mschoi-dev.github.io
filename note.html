@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Note — Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html" class="active">Notes</a>
+      <a href="photos.html">Photos</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main>
+    <article class="section entry" id="entry">
+      <p class="empty-state">Loading…</p>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const CAT_LABEL = { journal: 'Journal', paper: 'Paper Review', insight: 'Insight', idea: 'Idea' };
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    (async () => {
+      const box = document.getElementById('entry');
+      const id = new URLSearchParams(location.search).get('id');
+      if (!id) { box.innerHTML = '<p class="empty-state">Note not found.</p>'; return; }
+
+      const { data: n } = await sb.from('notes_posts').select('*').eq('id', id).single();
+      if (!n) { box.innerHTML = '<p class="empty-state">Note not found.</p>'; return; }
+
+      document.title = n.title + ' — Minseok Choi';
+      const paragraphs = n.content.split(/\n\s*\n/).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+
+      let adminBar = '';
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const { data: p } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
+        if (p && p.role === 'admin') adminBar = `<p class="note"><a href="#" id="del-note">Delete this note</a></p>`;
+      }
+
+      box.innerHTML = `
+        <p class="entry-date">${n.created_at.slice(0, 10)} ·
+          <span class="cat-badge cat-${n.category}">${CAT_LABEL[n.category] || n.category}</span>
+          <span class="hint"> · ${n.views + 1} views</span></p>
+        <h1 class="page-title">${esc(n.title)}</h1>
+        <div class="entry-body">${paragraphs}</div>
+        ${adminBar}
+        <a class="back-link" href="notes.html">← Back to Notes</a>`;
+
+      const del = document.getElementById('del-note');
+      if (del) del.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!confirm('Delete this note?')) return;
+        await sb.from('notes_posts').delete().eq('id', n.id);
+        location.href = 'notes.html';
+      });
+
+      sb.rpc('bump_note_views', { p_id: n.id });
+    })();
+  </script>
+</body>
+</html>

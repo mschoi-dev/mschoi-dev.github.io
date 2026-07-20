@@ -474,6 +474,59 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
 }
 .ig-cell:hover .ig-overlay { opacity: 1; }
 
+/* --- List controls (tabs + sort) --- */
+.list-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.4rem;
+}
+.list-controls .cat-tabs { margin-bottom: 0; }
+
+.sort-select {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.sort-select:focus { outline: none; border-color: var(--accent); }
+
+.post-views { margin-left: auto; white-space: nowrap; }
+.post-item .cat-badge { margin-left: 0.8rem; }
+
+/* --- Generic create dialog (notes / projects / downloads) --- */
+.ig-create-box.dlg { width: min(560px, calc(100vw - 2rem)); }
+.dlg-body { display: flex; flex-direction: column; gap: 0.8rem; padding: 1.1rem; }
+.dlg-input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--bg);
+}
+.dlg-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dlg-text {
+  min-height: 220px;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  color: var(--text);
+  background: var(--bg);
+}
+.dlg-text-sm { min-height: 90px; }
+.dlg-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
 /* --- Page head with action button --- */
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
 
