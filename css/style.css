@@ -474,6 +474,110 @@ main { flex: 1; width: 100%; max-width: 880px; margin: 0 auto; padding: 0 1.5rem
 }
 .ig-cell:hover .ig-overlay { opacity: 1; }
 
+/* --- Page head with action button --- */
+.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+
+/* --- New post (+) button, IG-style --- */
+.ig-add-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  cursor: pointer;
+  line-height: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+.ig-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- Create post modal (IG-style) --- */
+.ig-create-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(880px, calc(100vw - 2rem));
+  max-height: 88vh;
+  margin: 6vh auto 0;
+  background: var(--bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.ig-create-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+.ig-create-cancel {
+  border: none; background: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ig-create-share {
+  border: none; background: none;
+  color: #0095f6;                 /* IG action blue */
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.ig-create-share:disabled { color: #b3dbfd; cursor: default; }
+
+.ig-create-body { display: flex; min-height: 420px; }
+.ig-create-media {
+  flex: 1 1 60%;
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 420px;
+}
+.ig-create-media.dragging { outline: 2px dashed var(--accent); outline-offset: -10px; }
+.ig-create-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 2rem;
+}
+.ig-create-placeholder svg { color: var(--text); }
+#create-preview { max-width: 100%; max-height: 66vh; object-fit: contain; }
+
+.ig-create-side {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  padding: 1rem;
+}
+.ig-create-user { margin-bottom: 0.7rem; font-size: 0.95rem; }
+#create-caption {
+  flex: 1;
+  border: none;
+  resize: none;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--bg);
+  min-height: 180px;
+}
+#create-caption:focus { outline: none; }
+
+@media (max-width: 800px) {
+  .ig-create-body { flex-direction: column; }
+  .ig-create-media { min-height: 260px; }
+  .ig-create-side { border-left: none; border-top: 1px solid var(--border); }
+  #create-caption { min-height: 90px; }
+}
+
 /* --- Photo detail modal --- */
 .ig-modal { position: fixed; inset: 0; z-index: 100; }
 .ig-modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.65); }

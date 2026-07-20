@@ -24,13 +24,45 @@
 
   <main class="ig-main">
     <section class="section">
-      <h1 class="page-title">Photos</h1>
-      <p class="page-desc">Moments worth keeping. Sign in to like and comment.</p>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Photos</h1>
+          <p class="page-desc">Moments worth keeping. Sign in to like and comment.</p>
+        </div>
+        <div id="upload-area"></div>
+      </div>
 
-      <div id="upload-area"></div>
       <div class="ig-grid" id="grid"><p class="empty-state">Loading…</p></div>
     </section>
   </main>
+
+  <!-- Create post modal (Instagram-style) -->
+  <div class="ig-modal" id="create-modal" hidden>
+    <div class="ig-modal-backdrop" id="create-close-bg"></div>
+    <div class="ig-create-box">
+      <div class="ig-create-head">
+        <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
+        <strong>Create new post</strong>
+        <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
+      </div>
+      <div class="ig-create-body">
+        <div class="ig-create-media" id="create-drop">
+          <div class="ig-create-placeholder" id="create-placeholder">
+            <svg width="76" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="4" width="20" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m22 16-5-5-9 9"/></svg>
+            <p>Drag a photo here</p>
+            <button class="btn btn-primary" id="create-select" type="button">Select from computer</button>
+            <input type="file" id="create-file" accept="image/*" hidden>
+          </div>
+          <img id="create-preview" alt="" hidden>
+        </div>
+        <div class="ig-create-side">
+          <p class="ig-create-user"><strong>Minseok Choi</strong></p>
+          <textarea id="create-caption" maxlength="2000" placeholder="Write a caption…"></textarea>
+          <p class="hint" id="create-msg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Detail modal -->
   <div class="ig-modal" id="modal" hidden>
@@ -118,46 +150,92 @@
         c.addEventListener('click', () => openModal(posts.find(p => p.id == c.dataset.id))));
     }
 
+    // --- Create post (Instagram-style modal) ---
+    let createFile = null;
+
     function renderUpload() {
       if (!me || !me.admin) { $('upload-area').innerHTML = ''; return; }
       $('upload-area').innerHTML = `
-        <form class="form composer" id="up-form">
-          <textarea id="up-caption" rows="2" maxlength="2000" placeholder="Write a caption…"></textarea>
-          <div class="composer-bar">
-            <input type="file" id="up-file" accept="image/*" required>
-            <button type="submit" class="btn btn-primary" id="up-btn">Upload photo</button>
-          </div>
-          <p class="form-msg" id="up-msg"></p>
-        </form>`;
-      $('up-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const file = $('up-file').files[0];
-        if (!file) return;
-        if (file.size > 50 * 1024 * 1024) {
-          $('up-msg').textContent = 'Max file size is 50 MB.'; $('up-msg').className = 'form-msg error'; return;
-        }
-        $('up-btn').disabled = true;
-        $('up-msg').textContent = 'Uploading… (large files can take a while)';
-        $('up-msg').className = 'form-msg';
-        const safe = file.name.replace(/[^\w.\-]/g, '_');
-        const path = `archive/${Date.now()}_${safe}`;
-        const { error: upErr } = await sb.storage.from('photos').upload(path, file);
-        if (upErr) {
-          $('up-msg').textContent = 'Upload failed: ' + upErr.message; $('up-msg').className = 'form-msg error';
-          $('up-btn').disabled = false; return;
-        }
-        const { error: insErr } = await sb.from('photo_posts')
-          .insert({ image_path: path, caption: $('up-caption').value.trim() || null });
-        if (insErr) {
-          $('up-msg').textContent = 'Save failed: ' + insErr.message; $('up-msg').className = 'form-msg error';
-        } else {
-          $('up-msg').textContent = '✓ Published.'; $('up-msg').className = 'form-msg ok';
-          $('up-form').reset();
-          await loadData(); renderGrid();
-        }
-        $('up-btn').disabled = false;
-      });
+        <button class="ig-add-btn" id="add-btn" type="button" title="New post" aria-label="New post">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>
+        </button>`;
+      $('add-btn').addEventListener('click', openCreate);
     }
+
+    function openCreate() {
+      resetCreate();
+      $('create-modal').hidden = false;
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeCreate() {
+      $('create-modal').hidden = true;
+      document.body.style.overflow = '';
+      resetCreate();
+    }
+
+    function resetCreate() {
+      createFile = null;
+      $('create-preview').hidden = true;
+      $('create-preview').src = '';
+      $('create-placeholder').hidden = false;
+      $('create-caption').value = '';
+      $('create-msg').textContent = '';
+      $('create-share').disabled = true;
+      $('create-file').value = '';
+    }
+
+    function setCreateFile(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      if (file.size > 50 * 1024 * 1024) {
+        $('create-msg').textContent = 'Max file size is 50 MB.';
+        return;
+      }
+      createFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        $('create-preview').src = reader.result;
+        $('create-preview').hidden = false;
+        $('create-placeholder').hidden = true;
+        $('create-share').disabled = false;
+        $('create-msg').textContent = '';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    $('create-select').addEventListener('click', () => $('create-file').click());
+    $('create-file').addEventListener('change', () => setCreateFile($('create-file').files[0]));
+    $('create-cancel').addEventListener('click', closeCreate);
+    $('create-close-bg').addEventListener('click', closeCreate);
+
+    const drop = $('create-drop');
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragging'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
+    drop.addEventListener('drop', e => {
+      e.preventDefault(); drop.classList.remove('dragging');
+      setCreateFile(e.dataTransfer.files[0]);
+    });
+
+    $('create-share').addEventListener('click', async () => {
+      if (!createFile) return;
+      $('create-share').disabled = true;
+      $('create-msg').textContent = 'Sharing… (large files can take a while)';
+      const safe = createFile.name.replace(/[^\w.\-]/g, '_');
+      const path = `archive/${Date.now()}_${safe}`;
+      const { error: upErr } = await sb.storage.from('photos').upload(path, createFile);
+      if (upErr) {
+        $('create-msg').textContent = 'Upload failed: ' + upErr.message;
+        $('create-share').disabled = false; return;
+      }
+      const { error: insErr } = await sb.from('photo_posts')
+        .insert({ image_path: path, caption: $('create-caption').value.trim() || null });
+      if (insErr) {
+        $('create-msg').textContent = 'Save failed: ' + insErr.message;
+        $('create-share').disabled = false; return;
+      }
+      closeCreate();
+      await loadData(); renderGrid();
+    });
 
     async function loadComments(photoId) {
       const { data: cs } = await sb.from('photo_comments')
@@ -221,7 +299,11 @@
 
     $('modal-close').addEventListener('click', closeModal);
     $('modal-close-bg').addEventListener('click', closeModal);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && current) closeModal(); });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (current) closeModal();
+      else if (!$('create-modal').hidden) closeCreate();
+    });
 
     $('like-btn').addEventListener('click', async () => {
       if (!me) { $('modal-msg').innerHTML = '<a href="login.html">Sign in</a> to like photos.'; return; }
