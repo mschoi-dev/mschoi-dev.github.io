@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html">Notes</a>
+      <a href="photos.html">Photos</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main class="feed-main">
+    <section class="section" id="page">
+      <p class="empty-state">Loading…</p>
+    </section>
+  </main>
+
+  <!-- Create post modal -->
+  <div class="ig-modal" id="create-modal" hidden>
+    <div class="ig-modal-backdrop" id="create-close-bg"></div>
+    <div class="ig-create-box dlg">
+      <div class="ig-create-head">
+        <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
+        <strong>Create new post</strong>
+        <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
+      </div>
+      <div class="dlg-body">
+        <select id="c-cat" class="dlg-input"></select>
+        <textarea id="c-content" class="dlg-text dlg-text-sm" maxlength="5000"
+                  placeholder="Write something… (text-only posts are fine)"></textarea>
+        <div id="c-images"></div>
+        <button type="button" class="btn" id="c-add-img">＋ Add photos</button>
+        <input type="file" id="c-files" accept="image/*" multiple hidden>
+        <p class="hint" id="create-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    let me = null;                 // { id, name, admin, approved }
+    let cats = [];                 // accessible categories
+    let postable = new Set();      // category ids I can post to
+    let curCat = null;
+    let posts = [], imagesByPost = {}, likesByPost = {}, myLikes = new Set(),
+        commentsByPost = {}, urlByPath = {}, authorById = {};
+    let carouselIdx = {};          // post_id -> image index
+    let selFiles = [];             // create modal: [{file, caption}]
+
+    function nothingHere() {
+      $('page').innerHTML = '<p class="empty-state">There is nothing here.</p>';
+    }
+
+    // ---------- data ----------
+    async function loadFeed() {
+      const { data: ps } = await sb.from('community_posts')
+        .select('*').eq('category_id', curCat)
+        .order('created_at', { ascending: false }).limit(30);
+      posts = ps || [];
+      const ids = posts.map(p => p.id);
+      imagesByPost = {}; likesByPost = {}; myLikes = new Set(); commentsByPost = {}; carouselIdx = {};
+
+      if (ids.length) {
+        const [{ data: imgs }, { data: ls }, { data: cs }] = await Promise.all([
+          sb.from('community_post_images').select('*').in('post_id', ids).order('position'),
+          sb.from('community_post_likes').select('post_id, user_id').in('post_id', ids),
+          sb.from('community_post_comments').select('*').in('post_id', ids).order('created_at')
+        ]);
+        (imgs || []).forEach(i => (imagesByPost[i.post_id] = imagesByPost[i.post_id] || []).push(i));
+        (ls || []).forEach(l => {
+          likesByPost[l.post_id] = (likesByPost[l.post_id] || 0) + 1;
+          if (me && l.user_id === me.id) myLikes.add(l.post_id);
+        });
+        (cs || []).forEach(c => (commentsByPost[c.post_id] = commentsByPost[c.post_id] || []).push(c));
+
+        // signed URLs for all images in one call
+        const paths = (imgs || []).map(i => i.image_path);
+        if (paths.length) {
+          const { data: signed } = await sb.storage.from('community').createSignedUrls(paths, 3600);
+          (signed || []).forEach(s => { if (s.signedUrl) urlByPath[s.path] = s.signedUrl; });
+        }
+
+        // author avatars
+        const authorIds = [...new Set([...posts.map(p => p.author_id),
+          ...(cs || []).map(c => c.author_id)])];
+        if (authorIds.length) {
+          const { data: profs } = await sb.rpc('public_profiles', { p_ids: authorIds });
+          (profs || []).forEach(p => authorById[p.id] = p);
+        }
+      }
+      renderFeed();
+    }
+
+    // ---------- render ----------
+    function avatarHtml(uid, name) {
+      const p = authorById[uid];
+      if (p && p.avatar_path) {
+        const url = sb.storage.from('avatars').getPublicUrl(p.avatar_path).data.publicUrl;
+        return `<img class="feed-avatar" src="${url}" alt="">`;
+      }
+      return `<span class="feed-avatar feed-avatar-ph">${esc((name || '?').charAt(0).toUpperCase())}</span>`;
+    }
+
+    function carouselHtml(p) {
+      const imgs = imagesByPost[p.id] || [];
+      if (!imgs.length) return '';
+      const idx = carouselIdx[p.id] || 0;
+      const img = imgs[idx];
+      return `
+        <div class="feed-media" data-post="${p.id}">
+          <img src="${urlByPath[img.image_path] || ''}" alt="" loading="lazy">
+          ${imgs.length > 1 ? `
+            <button class="car-btn car-prev" data-post="${p.id}" ${idx === 0 ? 'disabled' : ''}>‹</button>
+            <button class="car-btn car-next" data-post="${p.id}" ${idx === imgs.length - 1 ? 'disabled' : ''}>›</button>
+            <div class="car-dots">${imgs.map((_, i) =>
+              `<span class="car-dot ${i === idx ? 'on' : ''}"></span>`).join('')}</div>` : ''}
+        </div>
+        ${img.caption ? `<p class="feed-img-caption">${esc(img.caption)}</p>` : ''}`;
+    }
+
+    function commentsHtml(p) {
+      const cs = commentsByPost[p.id] || [];
+      const shown = cs.slice(-2);
+      return `
+        <div class="feed-comments" id="fc-${p.id}">
+          ${cs.length > 2 ? `<a href="#" class="hint show-all" data-post="${p.id}">View all ${cs.length} comments</a>` : ''}
+          ${shown.map(c => commentLine(c)).join('')}
+        </div>
+        ${me && me.approved ? `
+        <form class="feed-comment-form" data-post="${p.id}">
+          <input type="text" maxlength="1000" placeholder="Add a comment…">
+          <button type="submit" class="ig-create-share">Post</button>
+        </form>` : ''}`;
+    }
+
+    function commentLine(c) {
+      const mine = me && (c.author_id === me.id || me.admin);
+      return `<p class="ig-comment"><strong>${esc(c.author_name)}</strong> ${esc(c.content)}
+        ${mine ? `<a href="#" class="c-del hint" data-id="${c.id}" data-post="${c.post_id}">delete</a>` : ''}</p>`;
+    }
+
+    function postCard(p) {
+      const likeN = likesByPost[p.id] || 0;
+      return `
+      <article class="feed-card" id="post-${p.id}">
+        <div class="feed-head">
+          ${avatarHtml(p.author_id, p.author_name)}
+          <strong>${esc(p.author_name)}</strong>
+          <span class="hint">${new Date(p.created_at).toLocaleDateString()}</span>
+          ${me && (p.author_id === me.id || me.admin)
+            ? `<a href="#" class="p-del hint" data-id="${p.id}">delete</a>` : ''}
+        </div>
+        ${carouselHtml(p)}
+        ${p.content ? `<p class="feed-content"><strong>${esc(p.author_name)}</strong> ${esc(p.content)}</p>` : ''}
+        <div class="feed-actions">
+          <button class="ig-like ${myLikes.has(p.id) ? 'liked' : ''}" data-id="${p.id}">
+            ${myLikes.has(p.id) ? '♥' : '♡'}</button>
+          <span class="hint">${likeN === 1 ? '1 like' : likeN + ' likes'}</span>
+        </div>
+        ${commentsHtml(p)}
+      </article>`;
+    }
+
+    function renderFeed() {
+      const feed = $('feed');
+      feed.innerHTML = posts.length
+        ? posts.map(postCard).join('')
+        : '<p class="empty-state">No posts yet — be the first!</p>';
+      bindFeed();
+      const target = new URLSearchParams(location.search).get('post');
+      if (target) {
+        const el = document.getElementById('post-' + target);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function rerenderCard(pid) {
+      const p = posts.find(x => x.id === pid);
+      const old = document.getElementById('post-' + pid);
+      if (!p || !old) return;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = postCard(p);
+      old.replaceWith(tmp.firstElementChild);
+      bindFeed();
+    }
+
+    function bindFeed() {
+      const feed = $('feed');
+      feed.querySelectorAll('.car-prev').forEach(b => b.onclick = () => {
+        const pid = Number(b.dataset.post);
+        carouselIdx[pid] = Math.max(0, (carouselIdx[pid] || 0) - 1);
+        rerenderCard(pid);
+      });
+      feed.querySelectorAll('.car-next').forEach(b => b.onclick = () => {
+        const pid = Number(b.dataset.post);
+        const max = (imagesByPost[pid] || []).length - 1;
+        carouselIdx[pid] = Math.min(max, (carouselIdx[pid] || 0) + 1);
+        rerenderCard(pid);
+      });
+      feed.querySelectorAll('.ig-like').forEach(b => b.onclick = async () => {
+        if (!me || !me.approved) return;
+        const pid = Number(b.dataset.id);
+        if (myLikes.has(pid)) {
+          await sb.from('community_post_likes').delete().eq('post_id', pid).eq('user_id', me.id);
+          myLikes.delete(pid); likesByPost[pid] = Math.max(0, (likesByPost[pid] || 1) - 1);
+        } else {
+          const { error } = await sb.from('community_post_likes').insert({ post_id: pid, user_id: me.id });
+          if (!error) { myLikes.add(pid); likesByPost[pid] = (likesByPost[pid] || 0) + 1; }
+        }
+        rerenderCard(pid);
+      });
+      feed.querySelectorAll('.show-all').forEach(a => a.onclick = (e) => {
+        e.preventDefault();
+        const pid = Number(a.dataset.post);
+        document.getElementById('fc-' + pid).innerHTML =
+          (commentsByPost[pid] || []).map(commentLine).join('');
+        bindFeed();
+      });
+      feed.querySelectorAll('.c-del').forEach(a => a.onclick = async (e) => {
+        e.preventDefault();
+        const pid = Number(a.dataset.post);
+        await sb.from('community_post_comments').delete().eq('id', a.dataset.id);
+        commentsByPost[pid] = (commentsByPost[pid] || []).filter(c => c.id != a.dataset.id);
+        rerenderCard(pid);
+      });
+      feed.querySelectorAll('.p-del').forEach(a => a.onclick = async (e) => {
+        e.preventDefault();
+        if (!confirm('Delete this post?')) return;
+        const pid = Number(a.dataset.id);
+        const paths = (imagesByPost[pid] || []).map(i => i.image_path);
+        await sb.from('community_posts').delete().eq('id', pid);
+        if (paths.length) await sb.storage.from('community').remove(paths);
+        loadFeed();
+      });
+      feed.querySelectorAll('.feed-comment-form').forEach(f => f.onsubmit = async (e) => {
+        e.preventDefault();
+        const input = f.querySelector('input');
+        const text = input.value.trim();
+        if (!text) return;
+        const pid = Number(f.dataset.post);
+        const { data, error } = await sb.from('community_post_comments')
+          .insert({ post_id: pid, author_id: me.id, author_name: me.name, content: text })
+          .select().single();
+        if (!error && data) {
+          (commentsByPost[pid] = commentsByPost[pid] || []).push(data);
+          rerenderCard(pid);
+        }
+      });
+    }
+
+    function renderPage() {
+      $('page').innerHTML = `
+        <div class="page-head">
+          <h1 class="page-title">Community</h1>
+          <div id="add-area"></div>
+        </div>
+        <div class="cat-tabs" id="cat-bar"></div>
+        <div id="feed"><p class="empty-state">Loading…</p></div>`;
+
+      $('cat-bar').innerHTML = cats.map(c =>
+        `<button class="cat-tab ${c.id === curCat ? 'active' : ''}" data-id="${c.id}">${esc(c.name)}</button>`).join('');
+      $('cat-bar').querySelectorAll('button').forEach(b => b.onclick = () => {
+        curCat = Number(b.dataset.id);
+        $('cat-bar').querySelectorAll('button').forEach(x =>
+          x.classList.toggle('active', Number(x.dataset.id) === curCat));
+        updateAddBtn();
+        loadFeed();
+      });
+      updateAddBtn();
+      loadFeed();
+    }
+
+    function updateAddBtn() {
+      const can = me && (me.admin || postable.has(curCat));
+      $('add-area').innerHTML = can ? `
+        <button class="ig-add-btn" id="add-btn" type="button" title="New post" aria-label="New post">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>
+        </button>` : '';
+      const btn = $('add-btn');
+      if (btn) btn.onclick = openCreate;
+    }
+
+    // ---------- create modal ----------
+    function openCreate() {
+      selFiles = [];
+      $('c-content').value = ''; $('c-images').innerHTML = ''; $('create-msg').textContent = '';
+      const opts = cats.filter(c => me.admin || postable.has(c.id));
+      $('c-cat').innerHTML = opts.map(c =>
+        `<option value="${c.id}" ${c.id === curCat ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+      updateShare();
+      $('create-modal').hidden = false;
+      document.body.style.overflow = 'hidden';
+    }
+    function closeCreate() {
+      $('create-modal').hidden = true;
+      document.body.style.overflow = '';
+    }
+    function updateShare() {
+      $('create-share').disabled = !($('c-content').value.trim() || selFiles.length);
+    }
+    function renderSel() {
+      $('c-images').innerHTML = selFiles.map((s, i) => `
+        <div class="sel-img">
+          <img src="${s.url}" alt="">
+          <textarea data-i="${i}" maxlength="1000"
+            placeholder="Caption for this photo… (optional)">${esc(s.caption)}</textarea>
+          <button type="button" class="sel-del" data-i="${i}">×</button>
+        </div>`).join('');
+      $('c-images').querySelectorAll('textarea').forEach(t =>
+        t.oninput = () => { selFiles[Number(t.dataset.i)].caption = t.value; });
+      $('c-images').querySelectorAll('.sel-del').forEach(b => b.onclick = () => {
+        selFiles.splice(Number(b.dataset.i), 1);
+        renderSel(); updateShare();
+      });
+      updateShare();
+    }
+
+    $('c-add-img').onclick = () => $('c-files').click();
+    $('c-files').onchange = () => {
+      [...$('c-files').files].forEach(f => {
+        if (!f.type.startsWith('image/')) return;
+        if (f.size > 50 * 1024 * 1024) { $('create-msg').textContent = 'Each image must be under 50 MB.'; return; }
+        const r = new FileReader();
+        r.onload = () => { selFiles.push({ file: f, caption: '', url: r.result }); renderSel(); };
+        r.readAsDataURL(f);
+      });
+      $('c-files').value = '';
+    };
+    $('c-content').oninput = updateShare;
+    $('create-cancel').onclick = closeCreate;
+    $('create-close-bg').onclick = closeCreate;
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !$('create-modal').hidden) closeCreate();
+    });
+
+    $('create-share').onclick = async () => {
+      $('create-share').disabled = true;
+      $('create-msg').textContent = 'Sharing…';
+      const catId = Number($('c-cat').value);
+      const { data: post, error } = await sb.from('community_posts')
+        .insert({ category_id: catId, author_id: me.id, author_name: me.name,
+                  content: $('c-content').value.trim() || null })
+        .select().single();
+      if (error) { $('create-msg').textContent = 'Failed: ' + error.message; $('create-share').disabled = false; return; }
+
+      for (let i = 0; i < selFiles.length; i++) {
+        $('create-msg').textContent = `Uploading photo ${i + 1}/${selFiles.length}…`;
+        const f = selFiles[i].file;
+        const safe = f.name.replace(/[^\w.\-]/g, '_');
+        const path = `${me.id}/${Date.now()}_${i}_${safe}`;
+        const { error: upErr } = await sb.storage.from('community').upload(path, f);
+        if (upErr) { $('create-msg').textContent = 'Photo upload failed: ' + upErr.message; continue; }
+        await sb.from('community_post_images').insert({
+          post_id: post.id, image_path: path,
+          caption: selFiles[i].caption.trim() || null, position: i
+        });
+      }
+      closeCreate();
+      curCat = catId;
+      renderPage();
+    };
+
+    // ---------- boot ----------
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { nothingHere(); return; }
+
+      const { data: prof } = await sb.from('profiles')
+        .select('full_name, status, role').eq('id', session.user.id).single();
+      if (!prof) { nothingHere(); return; }
+      me = { id: session.user.id, name: prof.full_name,
+             admin: prof.role === 'admin', approved: prof.status === 'approved' };
+
+      const { data: cs } = await sb.from('community_categories').select('*').order('id');
+      cats = cs || [];
+      if (!cats.length) {
+        if (me.admin) {
+          $('page').innerHTML = `
+            <h1 class="page-title">Community</h1>
+            <p class="page-desc">No categories yet. Create one in the
+            <a href="admin.html">admin panel</a>, then grant members access.</p>`;
+        } else nothingHere();
+        return;
+      }
+
+      const { data: acc } = await sb.from('community_access')
+        .select('category_id, can_post').eq('user_id', me.id);
+      (acc || []).forEach(a => { if (a.can_post) postable.add(a.category_id); });
+
+      // deep link ?post=N → find its category
+      const target = new URLSearchParams(location.search).get('post');
+      if (target) {
+        const { data: tp } = await sb.from('community_posts')
+          .select('category_id').eq('id', target).single();
+        if (tp && cats.some(c => c.id === tp.category_id)) curCat = tp.category_id;
+      }
+      if (!curCat) curCat = cats[0].id;
+      renderPage();
+    })();
+  </script>
+</body>
+</html>

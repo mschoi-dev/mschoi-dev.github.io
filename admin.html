@@ -41,6 +41,7 @@
   <script src="js/site-auth.js"></script>
   <script>
     const area = document.getElementById('auth-area');
+    let allMembers = [];
 
     function esc(s) {
       const d = document.createElement('div');
@@ -62,6 +63,7 @@
         .order('created_at', { ascending: false });
 
       if (error) { list.innerHTML = `<p class="form-msg error">Load failed: ${esc(error.message)}</p>`; return; }
+      allMembers = members || [];
 
       const pending = members.filter(m => m.status === 'pending').length;
       document.getElementById('pending-count').textContent =
@@ -121,6 +123,17 @@
       area.innerHTML = `
         <p class="note" id="pending-count">Loading…</p>
         <div id="member-list"><p class="empty-state">Loading members…</p></div>
+
+        <h2 class="section-title" style="margin-top:2.5rem">Community Categories</h2>
+        <form id="cat-form" class="form" style="margin-bottom:1.2rem">
+          <div class="composer-bar">
+            <input type="text" id="cat-name" class="dlg-input" maxlength="100"
+                   placeholder="New category name" style="flex:1" required>
+            <button type="submit" class="btn btn-primary">Create</button>
+          </div>
+        </form>
+        <div id="cat-admin"><p class="empty-state">Loading…</p></div>
+
         <p class="note">Signed in as <strong>${esc(me.full_name)}</strong> (admin)
         · <a href="#" id="signout">Sign out</a></p>`;
 
@@ -130,7 +143,77 @@
         render();
       });
 
-      loadMembers();
+      document.getElementById('cat-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('cat-name').value.trim();
+        if (!name) return;
+        const { error: cErr } = await sb.from('community_categories').insert({ name });
+        if (cErr) { alert('Create failed: ' + cErr.message); return; }
+        document.getElementById('cat-name').value = '';
+        loadCats();
+      });
+
+      await loadMembers();
+      loadCats();
+    }
+
+    async function loadCats() {
+      const box = document.getElementById('cat-admin');
+      const [{ data: cats, error: cErr }, { data: acc }] = await Promise.all([
+        sb.from('community_categories').select('*').order('id'),
+        sb.from('community_access').select('*')
+      ]);
+      if (cErr) { box.innerHTML = `<p class="form-msg error">${esc(cErr.message)}</p>`; return; }
+      if (!cats || !cats.length) { box.innerHTML = '<p class="empty-state">No categories yet. Categories are invisible to members until you grant them access.</p>'; return; }
+
+      box.innerHTML = cats.map(c => {
+        const rows = (acc || []).filter(a => a.category_id === c.id);
+        const inIds = new Set(rows.map(r => r.user_id));
+        const options = allMembers.filter(m => !inIds.has(m.id))
+          .map(m => `<option value="${m.id}">${esc(m.full_name)} (${esc(m.email)})</option>`).join('');
+        return `
+        <div class="member-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem">
+            <strong>${esc(c.name)}</strong>
+            <button class="btn act-btn cat-del" data-id="${c.id}">Delete category</button>
+          </div>
+          ${rows.map(r => {
+            const m = allMembers.find(x => x.id === r.user_id);
+            return `<div class="hint" style="display:flex;gap:0.9rem;align-items:center;flex-wrap:wrap">
+              <span style="min-width:150px">${esc(m ? m.full_name : r.user_id)}</span>
+              <label><input type="checkbox" class="acc-post" data-cat="${c.id}"
+                data-user="${r.user_id}" ${r.can_post ? 'checked' : ''}> can post</label>
+              <a href="#" class="acc-del" data-cat="${c.id}" data-user="${r.user_id}">remove</a>
+            </div>`;
+          }).join('') || '<p class="hint">No members have access yet.</p>'}
+          ${options ? `<div style="display:flex;gap:0.5rem">
+            <select class="dlg-input acc-select" data-cat="${c.id}" style="flex:1">${options}</select>
+            <button class="btn act-btn acc-add" data-cat="${c.id}">Grant access</button>
+          </div>` : ''}
+        </div>`;
+      }).join('');
+
+      box.querySelectorAll('.cat-del').forEach(b => b.onclick = async () => {
+        if (!confirm('Delete this category and ALL its posts?')) return;
+        await sb.from('community_categories').delete().eq('id', b.dataset.id);
+        loadCats();
+      });
+      box.querySelectorAll('.acc-add').forEach(b => b.onclick = async () => {
+        const sel = box.querySelector(`.acc-select[data-cat="${b.dataset.cat}"]`);
+        if (!sel || !sel.value) return;
+        await sb.from('community_access').insert({ category_id: Number(b.dataset.cat), user_id: sel.value });
+        loadCats();
+      });
+      box.querySelectorAll('.acc-del').forEach(a => a.onclick = async (e) => {
+        e.preventDefault();
+        await sb.from('community_access').delete()
+          .eq('category_id', a.dataset.cat).eq('user_id', a.dataset.user);
+        loadCats();
+      });
+      box.querySelectorAll('.acc-post').forEach(cb => cb.onchange = async () => {
+        await sb.from('community_access').update({ can_post: cb.checked })
+          .eq('category_id', cb.dataset.cat).eq('user_id', cb.dataset.user);
+      });
     }
 
     render();

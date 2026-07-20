@@ -393,6 +393,11 @@
       renderUpload();
       renderTagBar();
       renderGrid();
+      const target = new URLSearchParams(location.search).get('photo');
+      if (target) {
+        const p = posts.find(x => x.id == target);
+        if (p) openModal(p);
+      }
     })();
   </script>
 </body>
