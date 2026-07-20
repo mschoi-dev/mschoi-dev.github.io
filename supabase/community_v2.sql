@@ -8,6 +8,9 @@
 -- 0. Drop the old (unused) community table
 drop table if exists public.community_posts cascade;
 
+-- 0b. Avatar column must exist before public_profiles() below
+alter table public.profiles add column if not exists avatar_path text;
+
 -- 1. Categories (existence hidden unless you have access)
 create table if not exists public.community_categories (
   id          bigint generated always as identity primary key,
@@ -187,8 +190,6 @@ create policy "community image owners delete" on storage.objects for delete
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text));
 
 -- 9. Profile avatars (public bucket, own-folder upload)
-alter table public.profiles add column if not exists avatar_path text;
-
 insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', true)
 on conflict (id) do update set public = true;
