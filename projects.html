@@ -48,7 +48,7 @@
     <div class="ig-create-box dlg">
       <div class="ig-create-head">
         <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
-        <strong>New project</strong>
+        <strong id="modal-title">New project</strong>
         <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
       </div>
       <div class="dlg-body">
@@ -67,7 +67,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
   <script>
-    let projects = [], isAdmin = false;
+    let projects = [], isAdmin = false, editId = null;
     const $ = id => document.getElementById(id);
     function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
@@ -82,13 +82,27 @@
           <h2>${esc(p.title)}</h2>
           <p class="project-meta">${esc(p.meta || '')}</p>
           <p>${esc(p.description)}</p>
-          ${isAdmin ? `<p class="hint"><a href="#" class="pj-del" data-id="${p.id}">delete</a></p>` : ''}
+          ${isAdmin ? `<p class="hint"><a href="#" class="pj-edit" data-id="${p.id}">edit</a> ·
+            <a href="#" class="pj-del" data-id="${p.id}">delete</a></p>` : ''}
         </article>`).join('');
       list.querySelectorAll('.pj-del').forEach(a => a.addEventListener('click', async (e) => {
         e.preventDefault();
         if (!confirm('Delete this project?')) return;
         await sb.from('projects_posts').delete().eq('id', a.dataset.id);
         load();
+      }));
+      list.querySelectorAll('.pj-edit').forEach(a => a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const p = projects.find(x => x.id == a.dataset.id);
+        if (!p) return;
+        editId = p.id;
+        $('p-title').value = p.title;
+        $('p-meta').value = p.meta || '';
+        $('p-desc').value = p.description;
+        $('modal-title').textContent = 'Edit project';
+        $('create-share').textContent = 'Save';
+        updateShareState();
+        $('create-modal').hidden = false; document.body.style.overflow = 'hidden';
       }));
     }
 
@@ -108,7 +122,10 @@
     function closeCreate() {
       $('create-modal').hidden = true; document.body.style.overflow = '';
       $('p-title').value = ''; $('p-meta').value = ''; $('p-desc').value = '';
-      $('create-msg').textContent = ''; updateShareState();
+      $('create-msg').textContent = ''; editId = null;
+      $('modal-title').textContent = 'New project';
+      $('create-share').textContent = 'Share';
+      updateShareState();
     }
     $('create-cancel').addEventListener('click', closeCreate);
     $('create-close-bg').addEventListener('click', closeCreate);
@@ -116,12 +133,15 @@
 
     $('create-share').addEventListener('click', async () => {
       $('create-share').disabled = true;
-      $('create-msg').textContent = 'Sharing…';
-      const { error } = await sb.from('projects_posts').insert({
+      $('create-msg').textContent = 'Saving…';
+      const row = {
         title: $('p-title').value.trim(),
         meta: $('p-meta').value.trim() || null,
         description: $('p-desc').value.trim()
-      });
+      };
+      const { error } = editId
+        ? await sb.from('projects_posts').update(row).eq('id', editId)
+        : await sb.from('projects_posts').insert(row);
       if (error) { $('create-msg').textContent = 'Failed: ' + error.message; $('create-share').disabled = false; return; }
       closeCreate();
       load();

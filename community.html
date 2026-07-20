@@ -55,6 +55,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
+  <script src="js/image-utils.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
@@ -169,7 +170,9 @@
           <strong>${esc(p.author_name)}</strong>
           <span class="hint">${new Date(p.created_at).toLocaleDateString()}</span>
           ${me && (p.author_id === me.id || me.admin)
-            ? `<a href="#" class="p-del hint" data-id="${p.id}">delete</a>` : ''}
+            ? `<span class="p-del" style="margin-left:auto">
+                 <a href="#" class="p-edit hint" data-id="${p.id}">edit</a> ·
+                 <a href="#" class="p-del-a hint" data-id="${p.id}">delete</a></span>` : ''}
         </div>
         ${carouselHtml(p)}
         ${p.content ? `<p class="feed-content"><strong>${esc(p.author_name)}</strong> ${esc(p.content)}</p>` : ''}
@@ -244,7 +247,7 @@
         commentsByPost[pid] = (commentsByPost[pid] || []).filter(c => c.id != a.dataset.id);
         rerenderCard(pid);
       });
-      feed.querySelectorAll('.p-del').forEach(a => a.onclick = async (e) => {
+      feed.querySelectorAll('.p-del-a').forEach(a => a.onclick = async (e) => {
         e.preventDefault();
         if (!confirm('Delete this post?')) return;
         const pid = Number(a.dataset.id);
@@ -252,6 +255,32 @@
         await sb.from('community_posts').delete().eq('id', pid);
         if (paths.length) await sb.storage.from('community').remove(paths);
         loadFeed();
+      });
+      feed.querySelectorAll('.p-edit').forEach(a => a.onclick = (e) => {
+        e.preventDefault();
+        const pid = Number(a.dataset.id);
+        const p = posts.find(x => x.id === pid);
+        const card = document.getElementById('post-' + pid);
+        if (!p || !card) return;
+        let zone = card.querySelector('.feed-content');
+        if (!zone) {
+          zone = document.createElement('p');
+          zone.className = 'feed-content';
+          card.querySelector('.feed-actions').before(zone);
+        }
+        zone.innerHTML = `
+          <textarea class="dlg-text dlg-text-sm" style="width:100%">${esc(p.content || '')}</textarea>
+          <span style="display:flex;gap:0.5rem;margin-top:0.4rem">
+            <button class="btn btn-primary ed-save" style="padding:0.3rem 0.9rem;font-size:0.85rem;cursor:pointer">Save</button>
+            <button class="btn ed-cancel" style="padding:0.3rem 0.9rem;font-size:0.85rem;cursor:pointer">Cancel</button>
+          </span>`;
+        zone.querySelector('.ed-save').onclick = async () => {
+          const v = zone.querySelector('textarea').value.trim() || null;
+          const { error } = await sb.from('community_posts').update({ content: v }).eq('id', pid);
+          if (!error) { p.content = v; }
+          rerenderCard(pid);
+        };
+        zone.querySelector('.ed-cancel').onclick = () => rerenderCard(pid);
       });
       feed.querySelectorAll('.feed-comment-form').forEach(f => f.onsubmit = async (e) => {
         e.preventDefault();
@@ -366,7 +395,7 @@
 
       for (let i = 0; i < selFiles.length; i++) {
         $('create-msg').textContent = `Uploading photo ${i + 1}/${selFiles.length}…`;
-        const f = selFiles[i].file;
+        const f = await compressImage(selFiles[i].file, 1920, 0.85);
         const safe = f.name.replace(/[^\w.\-]/g, '_');
         const path = `${me.id}/${Date.now()}_${i}_${safe}`;
         const { error: upErr } = await sb.storage.from('community').upload(path, f);

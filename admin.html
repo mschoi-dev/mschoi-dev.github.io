@@ -121,6 +121,9 @@
       }
 
       area.innerHTML = `
+        <p class="note"><a href="dashboard.html">→ Content dashboard</a>
+          · <a href="#" id="exp-members">Export members (CSV)</a>
+          · <a href="#" id="exp-content">Backup content (JSON)</a></p>
         <p class="note" id="pending-count">Loading…</p>
         <div id="member-list"><p class="empty-state">Loading members…</p></div>
 
@@ -141,6 +144,40 @@
         e.preventDefault();
         await sb.auth.signOut();
         render();
+      });
+
+      function dlFile(filename, text, type) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([text], { type }));
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+
+      document.getElementById('exp-members').addEventListener('click', (e) => {
+        e.preventDefault();
+        const cols = ['id', 'email', 'full_name', 'country', 'origin', 'phone', 'status', 'role', 'created_at'];
+        const csvCell = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+        const csv = [cols.join(','),
+          ...allMembers.map(m => cols.map(c => csvCell(m[c])).join(','))].join('\r\n');
+        dlFile(`members_${new Date().toISOString().slice(0, 10)}.csv`, '﻿' + csv, 'text/csv;charset=utf-8');
+      });
+
+      document.getElementById('exp-content').addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.target.textContent = 'Backing up…';
+        const tables = ['profiles', 'notes_posts', 'projects_posts', 'download_items',
+          'photo_posts', 'photo_likes', 'photo_comments', 'community_categories',
+          'community_access', 'community_posts', 'community_post_images',
+          'community_post_likes', 'community_post_comments'];
+        const backup = { exported_at: new Date().toISOString() };
+        for (const t of tables) {
+          const { data } = await sb.from(t).select('*');
+          backup[t] = data || [];
+        }
+        dlFile(`site_backup_${new Date().toISOString().slice(0, 10)}.json`,
+          JSON.stringify(backup, null, 2), 'application/json');
+        e.target.textContent = 'Backup content (JSON)';
       });
 
       document.getElementById('cat-form').addEventListener('submit', async (e) => {

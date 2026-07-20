@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Dashboard — Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html">Notes</a>
+      <a href="photos.html">Photos</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section">
+      <h1 class="page-title">Content Dashboard</h1>
+      <div id="auth-area"><p class="empty-state">Checking your session…</p></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const area = $('auth-area');
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    const sum = a => a.reduce((x, y) => x + y, 0);
+
+    function rows(list) {
+      return list.length
+        ? list.map(r => `
+          <a class="post-item" href="${r.href}">
+            <span class="post-date">${r.date.slice(0, 10)}</span>
+            <span class="post-title">${esc(r.title)}</span>
+            <span class="post-views hint">${r.metric}</span>
+          </a>`).join('')
+        : '<p class="empty-state">Nothing yet.</p>';
+    }
+
+    function sect(id, title, count, body) {
+      return `
+        <h2 class="section-title" style="margin-top:2.2rem">${title}
+          <span class="hint">(${count})</span>
+          <select class="sort-select d-sort" data-sec="${id}" style="float:right">
+            <option value="new">Newest</option>
+            <option value="top">Top</option>
+          </select>
+        </h2>
+        <div class="post-list" id="sec-${id}">${body}</div>`;
+    }
+
+    const data = {};   // section id -> array of row objects with .top metric value
+
+    function renderSection(id) {
+      const s = document.querySelector(`.d-sort[data-sec="${id}"]`);
+      const mode = s ? s.value : 'new';
+      const list = (data[id] || []).slice().sort((a, b) =>
+        mode === 'top' ? b.top - a.top : new Date(b.date) - new Date(a.date));
+      document.getElementById('sec-' + id).innerHTML = rows(list);
+    }
+
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { area.innerHTML = '<div class="gate"><p>Admin access requires sign-in.</p><div class="hero-actions"><a href="login.html" class="btn btn-primary">Sign in</a></div></div>'; return; }
+      const { data: meP } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
+      if (!meP || meP.role !== 'admin') {
+        area.innerHTML = '<div class="gate"><p>This page is for the site administrator only.</p></div>'; return;
+      }
+
+      const [
+        { data: profs }, { data: notes }, { data: photos },
+        { data: pLikes }, { data: pComs }, { data: dls },
+        { data: projs }, { data: cPosts }, { data: cLikes }, { data: cComs }
+      ] = await Promise.all([
+        sb.from('profiles').select('status'),
+        sb.from('notes_posts').select('id, title, category, views, created_at'),
+        sb.from('photo_posts').select('id, caption, views, created_at'),
+        sb.from('photo_likes').select('photo_id'),
+        sb.from('photo_comments').select('photo_id'),
+        sb.from('download_items').select('id, title, version, downloads_count, created_at'),
+        sb.from('projects_posts').select('id, title, created_at'),
+        sb.from('community_posts').select('id, content, author_name, created_at'),
+        sb.from('community_post_likes').select('post_id'),
+        sb.from('community_post_comments').select('post_id')
+      ]);
+
+      const count = (arr, key) => {
+        const m = {};
+        (arr || []).forEach(r => m[r[key]] = (m[r[key]] || 0) + 1);
+        return m;
+      };
+      const plM = count(pLikes, 'photo_id'), pcM = count(pComs, 'photo_id');
+      const clM = count(cLikes, 'post_id'), ccM = count(cComs, 'post_id');
+
+      const members = profs || [];
+      const pending = members.filter(m => m.status === 'pending').length;
+
+      data.notes = (notes || []).map(n => ({
+        href: `note.html?id=${n.id}`, date: n.created_at,
+        title: n.title, metric: `${n.views} views · ${n.category}`, top: n.views }));
+      data.photos = (photos || []).map(p => ({
+        href: `photos.html?photo=${p.id}`, date: p.created_at,
+        title: p.caption ? p.caption.slice(0, 60) : '(no caption)',
+        metric: `${p.views || 0} views · ♥ ${plM[p.id] || 0} · 💬 ${pcM[p.id] || 0}`,
+        top: (plM[p.id] || 0) * 100 + (p.views || 0) }));
+      data.downloads = (dls || []).map(d => ({
+        href: 'downloads.html', date: d.created_at,
+        title: d.title + (d.version ? ` v${d.version}` : ''),
+        metric: `${d.downloads_count || 0} downloads`, top: d.downloads_count || 0 }));
+      data.projects = (projs || []).map(p => ({
+        href: 'projects.html', date: p.created_at, title: p.title, metric: '', top: 0 }));
+      data.community = (cPosts || []).map(p => ({
+        href: `community.html?post=${p.id}`, date: p.created_at,
+        title: `${p.author_name}: ${(p.content || '(photo post)').slice(0, 50)}`,
+        metric: `♥ ${clM[p.id] || 0} · 💬 ${ccM[p.id] || 0}`,
+        top: (clM[p.id] || 0) * 10 + (ccM[p.id] || 0) }));
+
+      area.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat"><b>${members.length}</b>members${pending ? ` <span class="badge badge-soon">${pending} pending</span>` : ''}</div>
+          <div class="stat"><b>${(notes || []).length}</b>notes · ${sum((notes || []).map(n => n.views))} views</div>
+          <div class="stat"><b>${(photos || []).length}</b>photos · ♥ ${(pLikes || []).length}</div>
+          <div class="stat"><b>${(dls || []).length}</b>files · ${sum((dls || []).map(d => d.downloads_count || 0))} downloads</div>
+          <div class="stat"><b>${(cPosts || []).length}</b>community posts</div>
+        </div>
+        <p class="note"><a href="admin.html">Member admin</a> · <a href="profile.html">My profile</a></p>
+        ${sect('notes', 'Notes', (notes || []).length, '')}
+        ${sect('photos', 'Photos', (photos || []).length, '')}
+        ${sect('downloads', 'Downloads', (dls || []).length, '')}
+        ${sect('community', 'Community', (cPosts || []).length, '')}
+        ${sect('projects', 'Projects', (projs || []).length, '')}`;
+
+      ['notes', 'photos', 'downloads', 'community', 'projects'].forEach(renderSection);
+      document.querySelectorAll('.d-sort').forEach(s =>
+        s.addEventListener('change', () => renderSection(s.dataset.sec)));
+    })();
+  </script>
+</body>
+</html>

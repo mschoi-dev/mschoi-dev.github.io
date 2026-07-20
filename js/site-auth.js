@@ -4,6 +4,12 @@ const SUPABASE_URL = 'https://kqobregejyafvvzmccym.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ZiRBBYInbAi2mBE76eqbWQ_hB4WCsTR';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Cloudflare Turnstile bot protection. Leave empty to disable.
+// Setup: create a Turnstile widget (dash.cloudflare.com → Turnstile),
+// put the SITE key here, and the SECRET key in
+// Supabase → Auth → Attack Protection → Enable CAPTCHA (Turnstile).
+const TURNSTILE_SITE_KEY = '';
+
 // Nav: signed-in users get a profile button; members with community
 // access (and admins) additionally see the hidden Community link.
 (async () => {

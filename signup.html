@@ -54,6 +54,7 @@
         </div>
 
         <p class="hint">By signing up you agree to the <a href="privacy.html">privacy policy</a>.</p>
+        <div id="captcha-box"></div>
         <button type="submit" class="btn btn-primary" id="submit-btn">Create account</button>
         <p id="form-msg" class="form-msg" role="status"></p>
       </form>
@@ -73,6 +74,17 @@
     const msg = document.getElementById('form-msg');
     const btn = document.getElementById('submit-btn');
 
+    let captchaToken = null;
+    if (TURNSTILE_SITE_KEY) {
+      window._tsReady = () => turnstile.render('#captcha-box', {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: t => { captchaToken = t; }
+      });
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=_tsReady';
+      document.head.appendChild(s);
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       btn.disabled = true;
@@ -90,7 +102,8 @@
         password: document.getElementById('password').value,
         options: {
           emailRedirectTo: 'https://mschoi-dev.github.io/login.html',
-          data: { full_name, country, origin, phone }
+          data: { full_name, country, origin, phone },
+          captchaToken: captchaToken || undefined
         }
       });
 

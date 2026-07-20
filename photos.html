@@ -102,6 +102,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
+  <script src="js/image-utils.js"></script>
   <script>
     let me = null;            // { id, name, approved, admin }
     let posts = [];
@@ -163,7 +164,7 @@
                          new Date(b.created_at) - new Date(a.created_at));
       grid.innerHTML = sorted.map(p => `
         <button class="ig-cell" data-id="${p.id}">
-          <img src="${publicUrl(p.image_path)}" alt="" loading="lazy">
+          <img src="${publicUrl(p.thumb_path || p.image_path)}" alt="" loading="lazy">
           <span class="ig-overlay"><span>♥ ${likeMap[p.id] || 0}</span><span>💬 ${commentMap[p.id] || 0}</span></span>
         </button>`).join('');
       grid.querySelectorAll('.ig-cell').forEach(c =>
@@ -253,19 +254,26 @@
     $('create-share').addEventListener('click', async () => {
       if (!createFile) return;
       $('create-share').disabled = true;
+      $('create-msg').textContent = 'Optimizing image…';
+      const web = await compressImage(createFile, 2560, 0.88);
+      const thumb = await compressImage(createFile, 640, 0.8);
       $('create-msg').textContent = 'Sharing… (large files can take a while)';
-      const safe = createFile.name.replace(/[^\w.\-]/g, '_');
-      const path = `archive/${Date.now()}_${safe}`;
-      const { error: upErr } = await sb.storage.from('photos').upload(path, createFile);
+      const stamp = Date.now();
+      const safe = web.name.replace(/[^\w.\-]/g, '_');
+      const path = `archive/${stamp}_${safe}`;
+      const thumbPath = `thumbs/${stamp}_${safe}`;
+      const { error: upErr } = await sb.storage.from('photos').upload(path, web);
       if (upErr) {
         $('create-msg').textContent = 'Upload failed: ' + upErr.message;
         $('create-share').disabled = false; return;
       }
+      const { error: thErr } = await sb.storage.from('photos').upload(thumbPath, thumb);
       const tags = [...new Set($('create-tags').value.split(',')
         .map(t => t.trim().toLowerCase().replace(/^#/, ''))
         .filter(Boolean))];
       const { error: insErr } = await sb.from('photo_posts')
-        .insert({ image_path: path, caption: $('create-caption').value.trim() || null, tags });
+        .insert({ image_path: path, thumb_path: thErr ? null : thumbPath,
+                  caption: $('create-caption').value.trim() || null, tags });
       if (insErr) {
         $('create-msg').textContent = 'Save failed: ' + insErr.message;
         $('create-share').disabled = false; return;
@@ -300,10 +308,12 @@
       $('like-count').textContent = n === 1 ? '1 like' : `${n} likes`;
     }
 
-    function openModal(post) {
+    function openModal(post, bump = true) {
       current = post;
-      post.views = (post.views || 0) + 1;
-      sb.rpc('bump_photo_views', { p_id: post.id });
+      if (bump) {
+        post.views = (post.views || 0) + 1;
+        sb.rpc('bump_photo_views', { p_id: post.id });
+      }
       $('modal-img').src = publicUrl(post.image_path);
       const tagHtml = (post.tags || []).length
         ? `<br><span class="ig-tag-line">${post.tags.map(t =>
@@ -318,7 +328,8 @@
         renderTagBar(); renderGrid();
       }));
       $('modal-admin').innerHTML = (me && me.admin)
-        ? `<a href="#" id="post-del" class="hint">delete post</a>` : '';
+        ? `<a href="#" id="post-edit" class="hint">edit</a> ·
+           <a href="#" id="post-del" class="hint">delete post</a>` : '';
       $('modal-msg').textContent = '';
       $('comment-form').style.display = (me && me.approved) ? '' : 'none';
       if (!me) $('modal-msg').innerHTML = '<a href="login.html">Sign in</a> to like and comment.';
@@ -333,9 +344,37 @@
         e.preventDefault();
         if (!confirm('Delete this photo post?')) return;
         await sb.from('photo_posts').delete().eq('id', current.id);
-        await sb.storage.from('photos').remove([current.image_path]);
+        const rm = [current.image_path];
+        if (current.thumb_path) rm.push(current.thumb_path);
+        await sb.storage.from('photos').remove(rm);
         closeModal();
         await loadData(); renderTagBar(); renderGrid();
+      };
+
+      const ed = $('post-edit');
+      if (ed) ed.onclick = (e) => {
+        e.preventDefault();
+        $('modal-caption').innerHTML = `
+          <textarea id="edit-cap" class="dlg-text dlg-text-sm"
+            placeholder="Caption…">${esc(post.caption || '')}</textarea>
+          <input type="text" id="edit-tags" class="dlg-input" style="margin-top:0.5rem"
+            value="${esc((post.tags || []).join(', '))}" placeholder="tags, comma separated">
+          <div class="hero-actions" style="margin-top:0.6rem">
+            <button class="btn btn-primary" id="edit-save">Save</button>
+            <button class="btn" id="edit-cancel">Cancel</button>
+          </div>`;
+        $('edit-cancel').onclick = () => openModal(post, false);
+        $('edit-save').onclick = async () => {
+          const caption = $('edit-cap').value.trim() || null;
+          const tags = [...new Set($('edit-tags').value.split(',')
+            .map(t => t.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))];
+          const { error } = await sb.from('photo_posts')
+            .update({ caption, tags }).eq('id', post.id);
+          if (error) { $('modal-msg').textContent = 'Save failed: ' + error.message; return; }
+          post.caption = caption; post.tags = tags;
+          renderTagBar(); renderGrid();
+          openModal(post, false);
+        };
       };
     }
 

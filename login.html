@@ -35,6 +35,7 @@
           <label for="password">Password</label>
           <input type="password" id="password" required autocomplete="current-password">
         </div>
+        <div id="captcha-box"></div>
         <button type="submit" class="btn btn-primary" id="submit-btn">Sign in</button>
         <p id="form-msg" class="form-msg" role="status"></p>
       </form>
@@ -54,6 +55,17 @@
     const msg = document.getElementById('form-msg');
     const btn = document.getElementById('submit-btn');
 
+    let captchaToken = null;
+    if (TURNSTILE_SITE_KEY) {
+      window._tsReady = () => turnstile.render('#captcha-box', {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: t => { captchaToken = t; }
+      });
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=_tsReady';
+      document.head.appendChild(s);
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       btn.disabled = true;
@@ -62,7 +74,8 @@
 
       const { error } = await sb.auth.signInWithPassword({
         email: document.getElementById('email').value.trim(),
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        options: { captchaToken: captchaToken || undefined }
       });
 
       if (error) {

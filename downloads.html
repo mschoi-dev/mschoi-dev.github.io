@@ -42,7 +42,7 @@
     <div class="ig-create-box dlg">
       <div class="ig-create-head">
         <button class="ig-create-cancel" id="create-cancel" type="button">Cancel</button>
-        <strong>Publish file</strong>
+        <strong id="modal-title">Publish file</strong>
         <button class="ig-create-share" id="create-share" type="button" disabled>Share</button>
       </div>
       <div class="dlg-body">
@@ -66,6 +66,7 @@
     const area = $('auth-area');
     let me = null;          // { id, name, approved, admin }
     let items = [];
+    let editItem = null;
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
@@ -86,7 +87,8 @@
           </div>
           <div class="member-actions">
             <button class="btn btn-primary dl-btn" data-id="${it.id}" data-path="${esc(it.file_path)}">Download</button>
-            ${me && me.admin ? `<button class="btn act-btn dl-del" data-id="${it.id}" data-path="${esc(it.file_path)}">Delete</button>` : ''}
+            ${me && me.admin ? `<button class="btn act-btn dl-edit" data-id="${it.id}">Edit</button>
+            <button class="btn act-btn dl-del" data-id="${it.id}" data-path="${esc(it.file_path)}">Delete</button>` : ''}
           </div>
         </div>`).join('');
 
@@ -104,6 +106,18 @@
         await sb.from('download_items').delete().eq('id', b.dataset.id);
         await sb.storage.from('downloads').remove([b.dataset.path]);
         loadItems();
+      }));
+
+      listEl.querySelectorAll('.dl-edit').forEach(b => b.addEventListener('click', () => {
+        editItem = items.find(x => x.id == b.dataset.id);
+        if (!editItem) return;
+        $('d-title').value = editItem.title;
+        $('d-version').value = editItem.version || '';
+        $('d-desc').value = editItem.description || '';
+        $('modal-title').textContent = 'Edit file';
+        $('create-share').textContent = 'Save';
+        updateShareState();
+        $('create-modal').hidden = false; document.body.style.overflow = 'hidden';
       }));
     }
 
@@ -187,7 +201,8 @@
 
     // --- Publish file modal ---
     function updateShareState() {
-      $('create-share').disabled = !($('d-title').value.trim() && $('d-file').files.length);
+      $('create-share').disabled =
+        !($('d-title').value.trim() && ($('d-file').files.length || editItem));
     }
     $('d-title').addEventListener('input', updateShareState);
     $('d-file').addEventListener('change', updateShareState);
@@ -195,7 +210,10 @@
     function closeCreate() {
       $('create-modal').hidden = true; document.body.style.overflow = '';
       $('d-title').value = ''; $('d-version').value = ''; $('d-desc').value = ''; $('d-file').value = '';
-      $('create-msg').textContent = ''; updateShareState();
+      $('create-msg').textContent = ''; editItem = null;
+      $('modal-title').textContent = 'Publish file';
+      $('create-share').textContent = 'Share';
+      updateShareState();
     }
     $('create-cancel').addEventListener('click', closeCreate);
     $('create-close-bg').addEventListener('click', closeCreate);
@@ -203,23 +221,34 @@
 
     $('create-share').addEventListener('click', async () => {
       const file = $('d-file').files[0];
-      if (!file) return;
-      if (file.size > 50 * 1024 * 1024) {
+      if (!file && !editItem) return;
+      if (file && file.size > 50 * 1024 * 1024) {
         $('create-msg').textContent = 'Max file size is 50 MB on the current plan.'; return;
       }
       $('create-share').disabled = true;
-      $('create-msg').textContent = 'Uploading… (large files can take a while)';
-      const safe = file.name.replace(/[^\w.\-]/g, '_');
-      const path = `files/${Date.now()}_${safe}`;
-      const { error: upErr } = await sb.storage.from('downloads').upload(path, file);
-      if (upErr) { $('create-msg').textContent = 'Upload failed: ' + upErr.message; $('create-share').disabled = false; return; }
-      const { error: insErr } = await sb.from('download_items').insert({
+
+      let path = editItem ? editItem.file_path : null;
+      if (file) {
+        $('create-msg').textContent = 'Uploading… (large files can take a while)';
+        const safe = file.name.replace(/[^\w.\-]/g, '_');
+        path = `files/${Date.now()}_${safe}`;
+        const { error: upErr } = await sb.storage.from('downloads').upload(path, file);
+        if (upErr) { $('create-msg').textContent = 'Upload failed: ' + upErr.message; $('create-share').disabled = false; return; }
+        if (editItem && editItem.file_path !== path) {
+          await sb.storage.from('downloads').remove([editItem.file_path]);
+        }
+      }
+
+      const row = {
         title: $('d-title').value.trim(),
         version: $('d-version').value.trim() || null,
         description: $('d-desc').value.trim() || null,
         file_path: path
-      });
-      if (insErr) { $('create-msg').textContent = 'Save failed: ' + insErr.message; $('create-share').disabled = false; return; }
+      };
+      const { error: dbErr } = editItem
+        ? await sb.from('download_items').update(row).eq('id', editItem.id)
+        : await sb.from('download_items').insert(row);
+      if (dbErr) { $('create-msg').textContent = 'Save failed: ' + dbErr.message; $('create-share').disabled = false; return; }
       closeCreate();
       loadItems();
     });

@@ -52,7 +52,8 @@
       const { data: { session } } = await sb.auth.getSession();
       if (session) {
         const { data: p } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
-        if (p && p.role === 'admin') adminBar = `<p class="note"><a href="#" id="del-note">Delete this note</a></p>`;
+        if (p && p.role === 'admin') adminBar =
+          `<p class="note"><a href="#" id="edit-note">Edit</a> · <a href="#" id="del-note">Delete this note</a></p>`;
       }
 
       box.innerHTML = `
@@ -70,6 +71,36 @@
         if (!confirm('Delete this note?')) return;
         await sb.from('notes_posts').delete().eq('id', n.id);
         location.href = 'notes.html';
+      });
+
+      const edit = document.getElementById('edit-note');
+      if (edit) edit.addEventListener('click', (e) => {
+        e.preventDefault();
+        box.innerHTML = `
+          <h1 class="page-title" style="margin-bottom:1rem">Edit note</h1>
+          <div class="dlg-body" style="padding:0">
+            <input type="text" id="e-title" class="dlg-input" maxlength="200" value="${esc(n.title)}">
+            <select id="e-cat" class="dlg-input">
+              ${Object.entries(CAT_LABEL).map(([k, v]) =>
+                `<option value="${k}" ${k === n.category ? 'selected' : ''}>${v}</option>`).join('')}
+            </select>
+            <textarea id="e-content" class="dlg-text" maxlength="20000">${esc(n.content)}</textarea>
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="e-save">Save</button>
+              <button class="btn" id="e-cancel">Cancel</button>
+            </div>
+            <p class="hint" id="e-msg"></p>
+          </div>`;
+        document.getElementById('e-cancel').onclick = () => location.reload();
+        document.getElementById('e-save').onclick = async () => {
+          const { error: uErr } = await sb.from('notes_posts').update({
+            title: document.getElementById('e-title').value.trim(),
+            category: document.getElementById('e-cat').value,
+            content: document.getElementById('e-content').value.trim()
+          }).eq('id', n.id);
+          if (uErr) { document.getElementById('e-msg').textContent = 'Save failed: ' + uErr.message; return; }
+          location.reload();
+        };
       });
 
       sb.rpc('bump_note_views', { p_id: n.id });
