@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>My Profile — Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html">Notes</a>
+      <a href="photos.html">Photos</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section auth-box">
+      <h1 class="page-title">My Profile</h1>
+      <div id="auth-area"><p class="empty-state">Checking your session…</p></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const area = $('auth-area');
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    const STATUS_BADGE = {
+      pending:  '<span class="badge badge-soon">pending approval</span>',
+      approved: '<span class="badge badge-ok">approved</span>',
+      blocked:  '<span class="badge badge-blocked">blocked</span>'
+    };
+
+    async function render() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        area.innerHTML = `
+          <div class="gate">
+            <p>Please sign in to view your profile.</p>
+            <div class="hero-actions">
+              <a href="login.html" class="btn btn-primary">Sign in</a>
+              <a href="signup.html" class="btn">Sign up</a>
+            </div>
+          </div>`;
+        return;
+      }
+
+      const { data: p, error } = await sb.from('profiles')
+        .select('*').eq('id', session.user.id).single();
+      if (error || !p) {
+        area.innerHTML = `<p class="form-msg error">Could not load your profile.</p>`;
+        return;
+      }
+
+      area.innerHTML = `
+        <p class="page-desc">
+          ${STATUS_BADGE[p.status] || esc(p.status)}
+          ${p.role === 'admin' ? '<span class="badge badge-ok">admin</span>' : ''}
+          <span class="hint"> · member since ${new Date(p.created_at).toLocaleDateString()}</span>
+        </p>
+
+        <form id="profile-form" class="form">
+          <div class="field">
+            <label>Email</label>
+            <input type="email" value="${esc(p.email)}" disabled>
+          </div>
+          <div class="field">
+            <label for="full_name">Full name</label>
+            <input type="text" id="full_name" value="${esc(p.full_name)}" required>
+          </div>
+          <div class="field">
+            <label for="country">Country</label>
+            <input type="text" id="country" value="${esc(p.country)}" required>
+          </div>
+          <div class="field">
+            <label for="origin">Affiliation / Origin</label>
+            <input type="text" id="origin" value="${esc(p.origin)}" required>
+          </div>
+          <div class="field">
+            <label for="phone">Phone <span class="hint">(optional)</span></label>
+            <input type="tel" id="phone" value="${esc(p.phone || '')}">
+          </div>
+          <button type="submit" class="btn btn-primary" id="save-btn">Save changes</button>
+          <p id="form-msg" class="form-msg" role="status"></p>
+        </form>
+
+        <p class="note">
+          ${p.role === 'admin' ? '<a href="admin.html">Member admin</a> · ' : ''}
+          <a href="#" id="signout">Sign out</a>
+        </p>`;
+
+      $('profile-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        $('save-btn').disabled = true;
+        $('form-msg').textContent = 'Saving…'; $('form-msg').className = 'form-msg';
+        const { error: uErr } = await sb.from('profiles').update({
+          full_name: $('full_name').value.trim(),
+          country: $('country').value.trim(),
+          origin: $('origin').value.trim(),
+          phone: $('phone').value.trim() || null
+        }).eq('id', session.user.id);
+        if (uErr) {
+          $('form-msg').textContent = 'Save failed: ' + uErr.message;
+          $('form-msg').className = 'form-msg error';
+        } else {
+          $('form-msg').textContent = '✓ Saved.';
+          $('form-msg').className = 'form-msg ok';
+        }
+        $('save-btn').disabled = false;
+      });
+
+      $('signout').addEventListener('click', async (e) => {
+        e.preventDefault();
+        await sb.auth.signOut();
+        location.href = 'index.html';
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>
