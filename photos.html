@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Photo log by Minseok Choi.">
+  <meta name="description" content="Photo archive by Minseok Choi.">
   <title>Photos — Minseok Choi</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
@@ -16,27 +16,251 @@
       <a href="projects.html">Projects</a>
       <a href="downloads.html">Downloads</a>
       <a href="notes.html">Notes</a>
-      <a href="journal.html">Journal</a>
       <a href="photos.html" class="active">Photos</a>
-      <a href="community.html">Community</a>
       <a href="contact.html">Contact</a>
       <a href="login.html" class="nav-signin">Sign in</a>
     </div>
   </nav>
 
-  <main>
+  <main class="ig-main">
     <section class="section">
       <h1 class="page-title">Photos</h1>
-      <p class="page-desc">Moments worth keeping.</p>
+      <p class="page-desc">Moments worth keeping. Sign in to like and comment.</p>
 
-      <div class="photo-grid">
-        <p class="empty-state">First photos coming soon.</p>
-      </div>
+      <div id="upload-area"></div>
+      <div class="ig-grid" id="grid"><p class="empty-state">Loading…</p></div>
     </section>
   </main>
 
+  <!-- Detail modal -->
+  <div class="ig-modal" id="modal" hidden>
+    <div class="ig-modal-backdrop" id="modal-close-bg"></div>
+    <div class="ig-modal-box">
+      <button class="ig-modal-close" id="modal-close">×</button>
+      <div class="ig-modal-img"><img id="modal-img" src="" alt=""></div>
+      <div class="ig-modal-side">
+        <div class="ig-caption" id="modal-caption"></div>
+        <div class="ig-comments" id="modal-comments"></div>
+        <div class="ig-actions">
+          <button class="ig-like" id="like-btn">♡</button>
+          <span id="like-count" class="hint"></span>
+          <span id="modal-admin" class="ig-admin-slot"></span>
+        </div>
+        <form class="ig-comment-form" id="comment-form">
+          <input type="text" id="comment-input" maxlength="1000" placeholder="Add a comment…">
+          <button type="submit" class="btn" id="comment-btn">Post</button>
+        </form>
+        <p class="hint" id="modal-msg"></p>
+      </div>
+    </div>
+  </div>
+
   <footer class="footer">
-    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a></p>
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
   </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script>
+    let me = null;            // { id, name, approved, admin }
+    let posts = [];
+    let likeMap = {};         // photo_id -> count
+    let myLikes = new Set();  // photo_ids I liked
+    let commentMap = {};      // photo_id -> count
+    let current = null;       // post shown in modal
+
+    const $ = id => document.getElementById(id);
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+    const publicUrl = path => sb.storage.from('photos').getPublicUrl(path).data.publicUrl;
+
+    async function loadSession() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { me = null; return; }
+      const { data: p } = await sb.from('profiles')
+        .select('full_name, status, role').eq('id', session.user.id).single();
+      me = p ? {
+        id: session.user.id, name: p.full_name,
+        approved: p.status === 'approved', admin: p.role === 'admin'
+      } : null;
+    }
+
+    async function loadData() {
+      const [{ data: ps }, { data: ls }, { data: cs }] = await Promise.all([
+        sb.from('photo_posts').select('*').order('created_at', { ascending: false }),
+        sb.from('photo_likes').select('photo_id, user_id'),
+        sb.from('photo_comments').select('photo_id')
+      ]);
+      posts = ps || [];
+      likeMap = {}; myLikes = new Set(); commentMap = {};
+      (ls || []).forEach(l => {
+        likeMap[l.photo_id] = (likeMap[l.photo_id] || 0) + 1;
+        if (me && l.user_id === me.id) myLikes.add(l.photo_id);
+      });
+      (cs || []).forEach(c => { commentMap[c.photo_id] = (commentMap[c.photo_id] || 0) + 1; });
+    }
+
+    function renderGrid() {
+      const grid = $('grid');
+      if (posts.length === 0) {
+        grid.innerHTML = '<p class="empty-state">First photos coming soon.</p>';
+        return;
+      }
+      grid.innerHTML = posts.map(p => `
+        <button class="ig-cell" data-id="${p.id}">
+          <img src="${publicUrl(p.image_path)}" alt="" loading="lazy">
+          <span class="ig-overlay"><span>♥ ${likeMap[p.id] || 0}</span><span>💬 ${commentMap[p.id] || 0}</span></span>
+        </button>`).join('');
+      grid.querySelectorAll('.ig-cell').forEach(c =>
+        c.addEventListener('click', () => openModal(posts.find(p => p.id == c.dataset.id))));
+    }
+
+    function renderUpload() {
+      if (!me || !me.admin) { $('upload-area').innerHTML = ''; return; }
+      $('upload-area').innerHTML = `
+        <form class="form composer" id="up-form">
+          <textarea id="up-caption" rows="2" maxlength="2000" placeholder="Write a caption…"></textarea>
+          <div class="composer-bar">
+            <input type="file" id="up-file" accept="image/*" required>
+            <button type="submit" class="btn btn-primary" id="up-btn">Upload photo</button>
+          </div>
+          <p class="form-msg" id="up-msg"></p>
+        </form>`;
+      $('up-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const file = $('up-file').files[0];
+        if (!file) return;
+        if (file.size > 50 * 1024 * 1024) {
+          $('up-msg').textContent = 'Max file size is 50 MB.'; $('up-msg').className = 'form-msg error'; return;
+        }
+        $('up-btn').disabled = true;
+        $('up-msg').textContent = 'Uploading… (large files can take a while)';
+        $('up-msg').className = 'form-msg';
+        const safe = file.name.replace(/[^\w.\-]/g, '_');
+        const path = `archive/${Date.now()}_${safe}`;
+        const { error: upErr } = await sb.storage.from('photos').upload(path, file);
+        if (upErr) {
+          $('up-msg').textContent = 'Upload failed: ' + upErr.message; $('up-msg').className = 'form-msg error';
+          $('up-btn').disabled = false; return;
+        }
+        const { error: insErr } = await sb.from('photo_posts')
+          .insert({ image_path: path, caption: $('up-caption').value.trim() || null });
+        if (insErr) {
+          $('up-msg').textContent = 'Save failed: ' + insErr.message; $('up-msg').className = 'form-msg error';
+        } else {
+          $('up-msg').textContent = '✓ Published.'; $('up-msg').className = 'form-msg ok';
+          $('up-form').reset();
+          await loadData(); renderGrid();
+        }
+        $('up-btn').disabled = false;
+      });
+    }
+
+    async function loadComments(photoId) {
+      const { data: cs } = await sb.from('photo_comments')
+        .select('*').eq('photo_id', photoId).order('created_at', { ascending: true });
+      const box = $('modal-comments');
+      if (!cs || cs.length === 0) { box.innerHTML = '<p class="hint">No comments yet.</p>'; return; }
+      box.innerHTML = cs.map(c => `
+        <p class="ig-comment">
+          <strong>${esc(c.author_name)}</strong> ${esc(c.content)}
+          ${(me && (c.author_id === me.id || me.admin))
+            ? `<a href="#" class="c-del hint" data-id="${c.id}">delete</a>` : ''}
+        </p>`).join('');
+      box.querySelectorAll('.c-del').forEach(a => a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await sb.from('photo_comments').delete().eq('id', a.dataset.id);
+        commentMap[photoId] = Math.max(0, (commentMap[photoId] || 1) - 1);
+        loadComments(photoId); renderGrid();
+      }));
+    }
+
+    function refreshLikeUI() {
+      $('like-btn').textContent = myLikes.has(current.id) ? '♥' : '♡';
+      $('like-btn').classList.toggle('liked', myLikes.has(current.id));
+      const n = likeMap[current.id] || 0;
+      $('like-count').textContent = n === 1 ? '1 like' : `${n} likes`;
+    }
+
+    function openModal(post) {
+      current = post;
+      $('modal-img').src = publicUrl(post.image_path);
+      $('modal-caption').innerHTML =
+        `<strong>Minseok Choi</strong> ${esc(post.caption || '')}<br>
+         <span class="hint">${new Date(post.created_at).toLocaleDateString()}</span>`;
+      $('modal-admin').innerHTML = (me && me.admin)
+        ? `<a href="#" id="post-del" class="hint">delete post</a>` : '';
+      $('modal-msg').textContent = '';
+      $('comment-form').style.display = (me && me.approved) ? '' : 'none';
+      if (!me) $('modal-msg').innerHTML = '<a href="login.html">Sign in</a> to like and comment.';
+      else if (!me.approved) $('modal-msg').textContent = 'Likes and comments open once your account is approved.';
+      refreshLikeUI();
+      loadComments(post.id);
+      $('modal').hidden = false;
+      document.body.style.overflow = 'hidden';
+
+      const del = $('post-del');
+      if (del) del.onclick = async (e) => {
+        e.preventDefault();
+        if (!confirm('Delete this photo post?')) return;
+        await sb.from('photo_posts').delete().eq('id', current.id);
+        await sb.storage.from('photos').remove([current.image_path]);
+        closeModal();
+        await loadData(); renderGrid();
+      };
+    }
+
+    function closeModal() {
+      $('modal').hidden = true;
+      document.body.style.overflow = '';
+      current = null;
+    }
+
+    $('modal-close').addEventListener('click', closeModal);
+    $('modal-close-bg').addEventListener('click', closeModal);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && current) closeModal(); });
+
+    $('like-btn').addEventListener('click', async () => {
+      if (!me) { $('modal-msg').innerHTML = '<a href="login.html">Sign in</a> to like photos.'; return; }
+      if (!me.approved) { $('modal-msg').textContent = 'Likes open once your account is approved.'; return; }
+      if (myLikes.has(current.id)) {
+        await sb.from('photo_likes').delete().eq('photo_id', current.id).eq('user_id', me.id);
+        myLikes.delete(current.id);
+        likeMap[current.id] = Math.max(0, (likeMap[current.id] || 1) - 1);
+      } else {
+        const { error } = await sb.from('photo_likes').insert({ photo_id: current.id, user_id: me.id });
+        if (!error) { myLikes.add(current.id); likeMap[current.id] = (likeMap[current.id] || 0) + 1; }
+      }
+      refreshLikeUI(); renderGrid();
+    });
+
+    $('comment-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = $('comment-input');
+      const text = input.value.trim();
+      if (!text || !me || !me.approved) return;
+      $('comment-btn').disabled = true;
+      const { error } = await sb.from('photo_comments')
+        .insert({ photo_id: current.id, author_id: me.id, author_name: me.name, content: text });
+      if (!error) {
+        input.value = '';
+        commentMap[current.id] = (commentMap[current.id] || 0) + 1;
+        loadComments(current.id); renderGrid();
+      } else {
+        $('modal-msg').textContent = 'Comment failed: ' + error.message;
+      }
+      $('comment-btn').disabled = false;
+    });
+
+    (async () => {
+      await loadSession();
+      await loadData();
+      renderUpload();
+      renderGrid();
+    })();
+  </script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Study notes and academic interests of Minseok Choi.">
+  <meta name="description" content="Notes by Minseok Choi — journal, paper reviews, insights, and ideas.">
   <title>Notes — Minseok Choi</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
@@ -16,9 +16,7 @@
       <a href="projects.html">Projects</a>
       <a href="downloads.html">Downloads</a>
       <a href="notes.html" class="active">Notes</a>
-      <a href="journal.html">Journal</a>
       <a href="photos.html">Photos</a>
-      <a href="community.html">Community</a>
       <a href="contact.html">Contact</a>
       <a href="login.html" class="nav-signin">Sign in</a>
     </div>
@@ -27,16 +25,48 @@
   <main>
     <section class="section">
       <h1 class="page-title">Notes</h1>
-      <p class="page-desc">Things I study and think about — quantum sensing, physics, engineering, and whatever else catches my curiosity.</p>
+      <p class="page-desc">A lighter space than Projects — my journal, papers and journals I read
+      and analyze, and insights and ideas from research and everyday study.</p>
 
-      <div class="post-list">
-        <p class="empty-state">First note coming soon.</p>
+      <div class="cat-tabs" role="tablist">
+        <button class="cat-tab active" data-cat="all">All</button>
+        <button class="cat-tab" data-cat="journal">Journal</button>
+        <button class="cat-tab" data-cat="paper">Paper Review</button>
+        <button class="cat-tab" data-cat="insight">Insight</button>
+        <button class="cat-tab" data-cat="idea">Idea</button>
       </div>
+
+      <div class="post-list" id="post-list">
+        <a class="post-item" href="notes/2026-07-19-launch.html" data-cat="journal">
+          <span class="post-date">2026-07-19</span>
+          <span class="post-title">This site is live</span>
+          <span class="cat-badge cat-journal">Journal</span>
+        </a>
+      </div>
+      <p class="empty-state" id="cat-empty" hidden>Nothing in this category yet.</p>
     </section>
   </main>
 
   <footer class="footer">
-    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a></p>
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
   </footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.cat-tab');
+    const items = document.querySelectorAll('.post-item');
+    const emptyMsg = document.getElementById('cat-empty');
+
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      let visible = 0;
+      items.forEach(it => {
+        const show = t.dataset.cat === 'all' || it.dataset.cat === t.dataset.cat;
+        it.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      emptyMsg.hidden = visible > 0;
+    }));
+  </script>
 </body>
 </html>
