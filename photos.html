@@ -31,7 +31,7 @@
       <p class="page-desc">Moments worth keeping. Sign in to like and comment.</p>
 
       <div class="list-controls">
-        <span></span>
+        <div class="cat-tabs" id="tag-bar"></div>
         <select class="sort-select" id="sort">
           <option value="new">Newest</option>
           <option value="liked">Most liked</option>
@@ -65,6 +65,8 @@
         <div class="ig-create-side">
           <p class="ig-create-user"><strong>Minseok Choi</strong></p>
           <textarea id="create-caption" maxlength="2000" placeholder="Write a caption…"></textarea>
+          <input type="text" id="create-tags" class="dlg-input" maxlength="200"
+                 placeholder="Tags — comma separated (e.g. gear-studio, travel)">
           <p class="hint" id="create-msg"></p>
         </div>
       </div>
@@ -103,6 +105,7 @@
   <script>
     let me = null;            // { id, name, approved, admin }
     let posts = [];
+    let curTag = 'all';
     let likeMap = {};         // photo_id -> count
     let myLikes = new Set();  // photo_ids I liked
     let commentMap = {};      // photo_id -> count
@@ -149,7 +152,12 @@
         return;
       }
       const s = $('sort').value;
-      const sorted = posts.slice().sort((a, b) =>
+      const filtered = curTag === 'all' ? posts : posts.filter(p => (p.tags || []).includes(curTag));
+      if (!filtered.length) {
+        grid.innerHTML = '<p class="empty-state">No photos with this tag yet.</p>';
+        return;
+      }
+      const sorted = filtered.slice().sort((a, b) =>
         s === 'liked'  ? (likeMap[b.id] || 0) - (likeMap[a.id] || 0) :
         s === 'viewed' ? (b.views || 0) - (a.views || 0) :
                          new Date(b.created_at) - new Date(a.created_at));
@@ -160,6 +168,19 @@
         </button>`).join('');
       grid.querySelectorAll('.ig-cell').forEach(c =>
         c.addEventListener('click', () => openModal(posts.find(p => p.id == c.dataset.id))));
+    }
+
+    function renderTagBar() {
+      const bar = $('tag-bar');
+      const tags = [...new Set(posts.flatMap(p => p.tags || []))].sort();
+      if (!tags.length) { bar.innerHTML = ''; return; }
+      bar.innerHTML =
+        `<button class="cat-tab ${curTag === 'all' ? 'active' : ''}" data-tag="all">All</button>` +
+        tags.map(t => `<button class="cat-tab ${curTag === t ? 'active' : ''}" data-tag="${esc(t)}">#${esc(t)}</button>`).join('');
+      bar.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        curTag = b.dataset.tag;
+        renderTagBar(); renderGrid();
+      }));
     }
 
     // --- Create post (Instagram-style modal) ---
@@ -192,6 +213,7 @@
       $('create-preview').src = '';
       $('create-placeholder').hidden = false;
       $('create-caption').value = '';
+      $('create-tags').value = '';
       $('create-msg').textContent = '';
       $('create-share').disabled = true;
       $('create-file').value = '';
@@ -239,14 +261,17 @@
         $('create-msg').textContent = 'Upload failed: ' + upErr.message;
         $('create-share').disabled = false; return;
       }
+      const tags = [...new Set($('create-tags').value.split(',')
+        .map(t => t.trim().toLowerCase().replace(/^#/, ''))
+        .filter(Boolean))];
       const { error: insErr } = await sb.from('photo_posts')
-        .insert({ image_path: path, caption: $('create-caption').value.trim() || null });
+        .insert({ image_path: path, caption: $('create-caption').value.trim() || null, tags });
       if (insErr) {
         $('create-msg').textContent = 'Save failed: ' + insErr.message;
         $('create-share').disabled = false; return;
       }
       closeCreate();
-      await loadData(); renderGrid();
+      await loadData(); renderTagBar(); renderGrid();
     });
 
     async function loadComments(photoId) {
@@ -280,9 +305,18 @@
       post.views = (post.views || 0) + 1;
       sb.rpc('bump_photo_views', { p_id: post.id });
       $('modal-img').src = publicUrl(post.image_path);
+      const tagHtml = (post.tags || []).length
+        ? `<br><span class="ig-tag-line">${post.tags.map(t =>
+            `<a href="#" class="ig-tag" data-tag="${esc(t)}">#${esc(t)}</a>`).join(' ')}</span>` : '';
       $('modal-caption').innerHTML =
-        `<strong>Minseok Choi</strong> ${esc(post.caption || '')}<br>
+        `<strong>Minseok Choi</strong> ${esc(post.caption || '')}${tagHtml}<br>
          <span class="hint">${new Date(post.created_at).toLocaleDateString()} · ${post.views} views</span>`;
+      $('modal-caption').querySelectorAll('.ig-tag').forEach(a => a.addEventListener('click', (e) => {
+        e.preventDefault();
+        curTag = a.dataset.tag;
+        closeModal();
+        renderTagBar(); renderGrid();
+      }));
       $('modal-admin').innerHTML = (me && me.admin)
         ? `<a href="#" id="post-del" class="hint">delete post</a>` : '';
       $('modal-msg').textContent = '';
@@ -301,7 +335,7 @@
         await sb.from('photo_posts').delete().eq('id', current.id);
         await sb.storage.from('photos').remove([current.image_path]);
         closeModal();
-        await loadData(); renderGrid();
+        await loadData(); renderTagBar(); renderGrid();
       };
     }
 
@@ -357,6 +391,7 @@
       await loadSession();
       await loadData();
       renderUpload();
+      renderTagBar();
       renderGrid();
     })();
   </script>
