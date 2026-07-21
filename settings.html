@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Site Settings — Minseok Choi</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232456d6'/%3E%3Ctext x='32' y='42' font-family='Segoe UI,sans-serif' font-size='26' font-weight='700' fill='white' text-anchor='middle'%3EMC%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <a href="index.html" class="nav-logo">Minseok Choi</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="projects.html">Projects</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="notes.html">Notes</a>
+      <a href="photos.html">Photos</a>
+      <a href="contact.html">Contact</a>
+      <a href="login.html" class="nav-signin">Sign in</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="section">
+      <h1 class="page-title">Site Settings</h1>
+      <div id="auth-area"><p class="empty-state">Checking your session…</p></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Minseok Choi · <a href="https://github.com/mschoi-dev">GitHub</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/site-auth.js"></script>
+  <script src="js/image-utils.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const area = $('auth-area');
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+    let uid = null;
+
+    (async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        area.innerHTML = '<div class="gate"><p>Admin access requires sign-in.</p><div class="hero-actions"><a href="login.html" class="btn btn-primary">Sign in</a></div></div>';
+        return;
+      }
+      uid = session.user.id;
+      const { data: meP } = await sb.from('profiles').select('role').eq('id', uid).single();
+      if (!meP || meP.role !== 'admin') {
+        area.innerHTML = '<div class="gate"><p>This page is for the site administrator only.</p></div>';
+        return;
+      }
+
+      const { data: s } = await sb.from('site_settings').select('*').eq('id', 1).single();
+      const st = s || {};
+      const avatarHtml = st.avatar_path
+        ? `<img class="profile-avatar" src="${sb.storage.from('avatars').getPublicUrl(st.avatar_path).data.publicUrl}" alt="">`
+        : `<span class="profile-avatar profile-avatar-ph">MC</span>`;
+
+      area.innerHTML = `
+        <p class="page-desc">These control what visitors see on the <a href="index.html">Home</a> and
+        <a href="contact.html">Contact</a> pages. Changes go live immediately after saving.</p>
+
+        <div class="profile-top">
+          <div class="profile-avatar-wrap">
+            <div id="avatar-slot">${avatarHtml}</div>
+            <button type="button" class="btn profile-avatar-btn" id="avatar-btn">Change home photo</button>
+            <input type="file" id="avatar-file" accept="image/*" hidden>
+          </div>
+          <p class="hint" id="avatar-msg">This photo appears in the Home hero.</p>
+        </div>
+
+        <form id="settings-form" class="form auth-box">
+          <div class="field"><label for="s-kicker">Tagline (small caps line)</label>
+            <input type="text" id="s-kicker" maxlength="80" value="${esc(st.hero_kicker || '')}"></div>
+          <div class="field"><label for="s-name">Display name (big title)</label>
+            <input type="text" id="s-name" maxlength="80" value="${esc(st.hero_name || '')}" required></div>
+          <div class="field"><label for="s-sub">Subtitle</label>
+            <input type="text" id="s-sub" maxlength="160" value="${esc(st.hero_sub || '')}"></div>
+          <div class="field"><label for="s-desc">Introduction</label>
+            <textarea id="s-desc" class="dlg-text dlg-text-sm" maxlength="600">${esc(st.hero_desc || '')}</textarea></div>
+          <div class="field"><label for="s-email">Public contact email</label>
+            <input type="email" id="s-email" maxlength="120" value="${esc(st.contact_email || '')}"></div>
+          <button type="submit" class="btn btn-primary" id="save-btn">Save changes</button>
+          <p id="form-msg" class="form-msg" role="status"></p>
+        </form>
+
+        <p class="note">
+          <a href="admin.html">Member admin</a> ·
+          <a href="dashboard.html">Content dashboard</a> ·
+          <a href="index.html">View home page</a>
+        </p>`;
+
+      $('avatar-btn').onclick = () => $('avatar-file').click();
+      $('avatar-file').onchange = async () => {
+        let f = $('avatar-file').files[0];
+        if (!f) return;
+        $('avatar-msg').textContent = 'Uploading…';
+        f = await compressImage(f, 512, 0.85);
+        const safe = f.name.replace(/[^\w.\-]/g, '_');
+        const path = `${uid}/home_${Date.now()}_${safe}`;
+        const { error: upErr } = await sb.storage.from('avatars').upload(path, f);
+        if (upErr) { $('avatar-msg').textContent = 'Upload failed: ' + upErr.message; return; }
+        const { error: uErr } = await sb.from('site_settings')
+          .upsert({ id: 1, avatar_path: path, updated_at: new Date().toISOString() });
+        if (uErr) { $('avatar-msg').textContent = 'Save failed: ' + uErr.message; return; }
+        $('avatar-slot').innerHTML =
+          `<img class="profile-avatar" src="${sb.storage.from('avatars').getPublicUrl(path).data.publicUrl}" alt="">`;
+        $('avatar-msg').textContent = '✓ Home photo updated.';
+      };
+
+      $('settings-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        $('save-btn').disabled = true;
+        $('form-msg').textContent = 'Saving…'; $('form-msg').className = 'form-msg';
+        const { error } = await sb.from('site_settings').upsert({
+          id: 1,
+          hero_kicker: $('s-kicker').value.trim() || null,
+          hero_name: $('s-name').value.trim(),
+          hero_sub: $('s-sub').value.trim() || null,
+          hero_desc: $('s-desc').value.trim() || null,
+          contact_email: $('s-email').value.trim() || null,
+          updated_at: new Date().toISOString()
+        });
+        $('form-msg').textContent = error ? 'Save failed: ' + error.message : '✓ Saved — live on the home page now.';
+        $('form-msg').className = error ? 'form-msg error' : 'form-msg ok';
+        $('save-btn').disabled = false;
+      });
+    })();
+  </script>
+</body>
+</html>

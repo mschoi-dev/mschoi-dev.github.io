@@ -27,45 +27,27 @@
 
   <main>
     <section class="hero">
-      <div class="avatar-placeholder" aria-hidden="true">MC</div>
+      <div id="hero-avatar"><div class="avatar-placeholder" aria-hidden="true">MC</div></div>
       <div>
-        <p class="hero-kicker">Engineer · Builder</p>
-        <h1>Minseok Choi</h1>
-        <p class="hero-sub">최민석 — Quantum sensor R&amp;D at Arrakis Tech</p>
-        <p class="hero-desc">
+        <p class="hero-kicker" id="h-kicker">Engineer · Builder</p>
+        <h1 id="h-name">Minseok Choi</h1>
+        <p class="hero-sub" id="h-sub">최민석 — Quantum sensor R&amp;D at Arrakis Tech</p>
+        <p class="hero-desc" id="h-desc">
           I work on quantum magnetometers by day and build practical software on the side —
           desktop tools, simulators, and web apps that solve real problems.
         </p>
         <div class="hero-actions">
           <a href="projects.html" class="btn btn-primary">View my work</a>
           <a href="contact.html" class="btn">Get in touch</a>
+          <a href="settings.html" class="btn" id="edit-home" hidden>✎ Edit home</a>
         </div>
       </div>
     </section>
 
     <section class="section">
       <h2 class="section-title">Featured Projects</h2>
-      <div class="card-grid">
-        <a class="card" href="projects.html#gear-studio">
-          <h3>Gear Studio</h3>
-          <p>Native desktop app for gear train design — auto-fit sizing, 8 gear types, mating, automatic profile shift. Fully offline.</p>
-          <span class="card-tag">Desktop</span>
-        </a>
-        <a class="card" href="projects.html#faraday">
-          <h3>FARADAY</h3>
-          <p>Distribution and licensing platform for my software: sign-up, admin approval, controlled downloads.</p>
-          <span class="card-tag">Platform</span>
-        </a>
-        <a class="card" href="projects.html#synapsemap">
-          <h3>SynapseMap</h3>
-          <p>Web app that maps personal networks as an interactive graph, organized by closeness.</p>
-          <span class="card-tag">Web App</span>
-        </a>
-        <a class="card" href="projects.html#drone-sim">
-          <h3>Drone Stability Test</h3>
-          <p>Wind-stability simulator for hovering drones — 8 DJI presets with a real-time risk gauge.</p>
-          <span class="card-tag">Simulation</span>
-        </a>
+      <div class="card-grid" id="featured">
+        <a class="card" href="projects.html"><h3>Loading…</h3><p></p></a>
       </div>
     </section>
   </main>
@@ -76,5 +58,46 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
+  <script>
+    function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+    (async () => {
+      // Hero content from site settings (editable in settings.html)
+      const { data: s } = await sb.from('site_settings').select('*').eq('id', 1).single();
+      if (s) {
+        if (s.hero_kicker) document.getElementById('h-kicker').textContent = s.hero_kicker;
+        if (s.hero_name)   document.getElementById('h-name').textContent = s.hero_name;
+        if (s.hero_sub)    document.getElementById('h-sub').textContent = s.hero_sub;
+        if (s.hero_desc)   document.getElementById('h-desc').textContent = s.hero_desc;
+        if (s.avatar_path) {
+          const url = sb.storage.from('avatars').getPublicUrl(s.avatar_path).data.publicUrl;
+          document.getElementById('hero-avatar').innerHTML =
+            `<img class="avatar" src="${url}" alt="${esc(s.hero_name || '')}">`;
+        }
+      }
+
+      // Featured: latest 4 projects from the DB
+      const { data: projs } = await sb.from('projects_posts')
+        .select('id, title, meta, description').order('id', { ascending: false }).limit(4);
+      const grid = document.getElementById('featured');
+      if (projs && projs.length) {
+        grid.innerHTML = projs.map(p => `
+          <a class="card" href="projects.html#p-${p.id}">
+            <h3>${esc(p.title)}</h3>
+            <p>${esc(p.description.slice(0, 140))}${p.description.length > 140 ? '…' : ''}</p>
+            ${p.meta ? `<span class="card-tag">${esc(p.meta.split('·')[0].trim())}</span>` : ''}
+          </a>`).join('');
+      } else {
+        grid.innerHTML = '<p class="empty-state">Projects coming soon.</p>';
+      }
+
+      // Admin-only edit shortcut
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const { data: p } = await sb.from('profiles').select('role').eq('id', session.user.id).single();
+        if (p && p.role === 'admin') document.getElementById('edit-home').hidden = false;
+      }
+    })();
+  </script>
 </body>
 </html>

@@ -163,16 +163,21 @@
 
     function postCard(p) {
       const likeN = likesByPost[p.id] || 0;
+      const mine = me && p.author_id === me.id;
+      const controls = [];
+      if (mine) controls.push(`<a href="#" class="p-edit hint" data-id="${p.id}">edit</a>`);
+      if (me && me.admin) controls.push(p.hidden
+        ? `<a href="#" class="p-hide hint" data-id="${p.id}" data-to="false">unhide</a>`
+        : `<a href="#" class="p-hide hint" data-id="${p.id}" data-to="true">hide</a>`);
+      if (mine || (me && me.admin)) controls.push(`<a href="#" class="p-del-a hint" data-id="${p.id}">delete</a>`);
       return `
-      <article class="feed-card" id="post-${p.id}">
+      <article class="feed-card ${p.hidden ? 'feed-hidden' : ''}" id="post-${p.id}">
         <div class="feed-head">
           ${avatarHtml(p.author_id, p.author_name)}
           <strong>${esc(p.author_name)}</strong>
           <span class="hint">${new Date(p.created_at).toLocaleDateString()}</span>
-          ${me && (p.author_id === me.id || me.admin)
-            ? `<span class="p-del" style="margin-left:auto">
-                 <a href="#" class="p-edit hint" data-id="${p.id}">edit</a> ·
-                 <a href="#" class="p-del-a hint" data-id="${p.id}">delete</a></span>` : ''}
+          ${p.hidden ? '<span class="badge badge-blocked">hidden</span>' : ''}
+          ${controls.length ? `<span class="p-del" style="margin-left:auto">${controls.join(' · ')}</span>` : ''}
         </div>
         ${carouselHtml(p)}
         ${p.content ? `<p class="feed-content"><strong>${esc(p.author_name)}</strong> ${esc(p.content)}</p>` : ''}
@@ -255,6 +260,17 @@
         await sb.from('community_posts').delete().eq('id', pid);
         if (paths.length) await sb.storage.from('community').remove(paths);
         loadFeed();
+      });
+      feed.querySelectorAll('.p-hide').forEach(a => a.onclick = async (e) => {
+        e.preventDefault();
+        const pid = Number(a.dataset.id);
+        const to = a.dataset.to === 'true';
+        const { error } = await sb.from('community_posts').update({ hidden: to }).eq('id', pid);
+        if (!error) {
+          const p = posts.find(x => x.id === pid);
+          if (p) p.hidden = to;
+          rerenderCard(pid);
+        }
       });
       feed.querySelectorAll('.p-edit').forEach(a => a.onclick = (e) => {
         e.preventDefault();

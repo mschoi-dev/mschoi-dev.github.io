@@ -138,7 +138,7 @@
           <div class="stat"><b>${(dls || []).length}</b>files · ${sum((dls || []).map(d => d.downloads_count || 0))} downloads</div>
           <div class="stat"><b>${(cPosts || []).length}</b>community posts</div>
         </div>
-        <p class="note"><a href="admin.html">Member admin</a> · <a href="profile.html">My profile</a></p>
+        <p class="note"><a href="admin.html">Member admin</a> · <a href="settings.html">Site settings</a> · <a href="profile.html">My profile</a></p>
         ${sect('notes', 'Notes', (notes || []).length, '')}
         ${sect('photos', 'Photos', (photos || []).length, '')}
         ${sect('downloads', 'Downloads', (dls || []).length, '')}

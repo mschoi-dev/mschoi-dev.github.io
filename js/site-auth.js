@@ -40,4 +40,17 @@ const TURNSTILE_SITE_KEY = '0x4AAAAAAD5-qxQ4Olt8vGQM';
       navLinks.insertBefore(a, contact);
     }
   }
+
+  // Admin-only nav link → management hub
+  if (p && p.role === 'admin') {
+    const navLinks = document.querySelector('.nav-links');
+    if (navLinks && !navLinks.querySelector('a[href$="admin.html"]')) {
+      const a = document.createElement('a');
+      a.href = 'admin.html';
+      a.textContent = 'Admin';
+      a.className = 'nav-admin';
+      if (/admin|dashboard|settings/.test(location.pathname)) a.classList.add('active');
+      navLinks.insertBefore(a, link);
+    }
+  }
 })();

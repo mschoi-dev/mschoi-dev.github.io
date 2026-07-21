@@ -30,7 +30,7 @@
       <div class="contact-list">
         <div class="contact-item">
           <span class="contact-label">Email</span>
-          <a href="mailto:minseok0640@gmail.com">minseok0640@gmail.com</a>
+          <a href="mailto:minseok0640@gmail.com" id="c-email">minseok0640@gmail.com</a>
         </div>
         <div class="contact-item">
           <span class="contact-label">GitHub</span>
@@ -48,5 +48,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/site-auth.js"></script>
+  <script>
+    (async () => {
+      const { data: s } = await sb.from('site_settings').select('contact_email').eq('id', 1).single();
+      if (s && s.contact_email) {
+        const a = document.getElementById('c-email');
+        a.textContent = s.contact_email;
+        a.href = 'mailto:' + s.contact_email;
+      }
+    })();
+  </script>
 </body>
 </html>
